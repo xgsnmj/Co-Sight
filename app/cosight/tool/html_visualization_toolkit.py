@@ -31,17 +31,18 @@ import shutil
 import pandas as pd
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # 非交互式后端
+matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import BytesIO
 import datetime
-import markdown  # 添加markdown库，用于将markdown转换为HTML
+import markdown  
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
-import concurrent.futures  # 添加并发库用于多线程处理
-import threading  # 添加线程锁用于线程安全
+import concurrent.futures 
+import threading 
+import io  
 
 # 字体配置函数
 def configure_matplotlib_fonts():
@@ -177,19 +178,23 @@ def ask_llm(prompt, temperature=0.3, max_tokens=4096):
         print(f"调用LLM时出错: {str(e)}")
         return None
 
-def generate_outline(text_files):
+def generate_outline(text_files, user_query=""):
     """根据工作区中的文本文件生成报告大纲"""
     print("正在生成报告大纲...")
     all_content = ""
     for file in text_files:
         all_content += f"文件名: {file['filename']}\n内容预览: {file['content'][:500]}...\n\n"
     
-    prompt = f"""作为一个专业的报告编辑器，请基于以下文本文件内容生成一个结构良好的报告大纲，大纲应包含：
+    # 判断用户查询的语言
+    is_chinese = bool(re.search(r'[\u4e00-\u9fff]', user_query)) if user_query else True
+    
+    if is_chinese:
+        prompt = f"""作为一个专业的报告编辑器，请基于以下文本文件内容生成一个结构良好的报告大纲，大纲应包含：
 1. 标题（主标题和副标题）
 2. 3-6个主要章节（每个章节都应该有明确的标题）
 3. 每个主要章节下的2-4个子章节
 
-请确保大纲逻辑连贯，涵盖所有重要信息，并适合转化为专业报告。
+请使用中文生成大纲，确保大纲逻辑连贯，涵盖所有重要信息，并适合转化为专业报告。
 
 文件内容：
 {all_content}
@@ -200,10 +205,10 @@ def generate_outline(text_files):
     "subtitle": "副标题",
     "sections": [
         {{
-            "title": "章节1标题",
+            "title": "1 章节1标题",
             "subsections": [
                 {{
-                    "title": "子章节1.1标题",
+                    "title": "1.1 子章节1.1标题",
                     "content_from": ["文件名1", "文件名2"]
                 }},
                 ...
@@ -214,6 +219,38 @@ def generate_outline(text_files):
 }}
 
 注意：content_from应该指示该子章节的内容应该从哪些文件中提取。请确保所有的JSON字段值都是字符串或数组，而不是嵌套的对象或复杂结构。
+"""
+    else:
+        prompt = f"""As a professional report editor, please generate a well-structured report outline based on the following text file content. The outline should include:
+1. Title (main title and subtitle)
+2. 3-6 main sections (each section should have a clear title)
+3. 2-4 subsections under each main section
+
+Please generate the outline in English, ensuring that the outline is logically coherent, covers all important information, and is suitable for conversion into a professional report.
+
+File content:
+{all_content}
+
+Please return the outline in JSON format as follows:
+{{
+    "title": "Main Title",
+    "subtitle": "Subtitle",
+    "sections": [
+        {{
+            "title": "1 Section 1 Title",
+            "subsections": [
+                {{
+                    "title": "1.1 Subsection 1.1 Title",
+                    "content_from": ["filename1", "filename2"]
+                }},
+                ...
+            ]
+        }},
+        ...
+    ]
+}}
+
+Note: content_from should indicate which files the content for that subsection should be extracted from. Please ensure that all JSON field values are strings or arrays, not nested objects or complex structures.
 """
     
     response = ask_llm(prompt)
@@ -235,52 +272,8 @@ def generate_outline(text_files):
             except json.JSONDecodeError as e:
                 print(f"JSON解析错误: {str(e)}")
                 print(f"JSON字符串: {json_str}")
-                # 提供一个基本大纲作为后备
-                outline = {
-                    "title": "自动生成的报告",
-                    "subtitle": "基于工作区文件的分析",
-                    "sections": [
-                        {
-                            "title": "概述",
-                            "subsections": [
-                                {
-                                    "title": "背景",
-                                    "content_from": []
-                                },
-                                {
-                                    "title": "主要发现",
-                                    "content_from": []
-                                }
-                            ]
-                        },
-                        {
-                            "title": "详细内容",
-                            "subsections": [
-                                {
-                                    "title": "重点分析",
-                                    "content_from": []
-                                },
-                                {
-                                    "title": "数据解读",
-                                    "content_from": []
-                                }
-                            ]
-                        },
-                        {
-                            "title": "结论与建议",
-                            "subsections": [
-                                {
-                                    "title": "结论",
-                                    "content_from": []
-                                },
-                                {
-                                    "title": "建议",
-                                    "content_from": []
-                                }
-                            ]
-                        }
-                    ]
-                }
+                # 提供错误信息并返回空结构
+                return None
             
             # 确保所有文件引用都是列表类型
             for section in outline.get('sections', []):
@@ -295,100 +288,10 @@ def generate_outline(text_files):
             print(f"解析大纲JSON时出错: {str(e)}")
             print(f"原始响应: {response}")
             traceback.print_exc()  # 打印完整堆栈
-            
-            # 提供一个基本大纲作为后备
-            return {
-                "title": "自动生成的报告",
-                "subtitle": "基于工作区文件的分析",
-                "sections": [
-                    {
-                        "title": "概述",
-                        "subsections": [
-                            {
-                                "title": "背景",
-                                "content_from": []
-                            },
-                            {
-                                "title": "主要发现",
-                                "content_from": []
-                            }
-                        ]
-                    },
-                    {
-                        "title": "详细内容",
-                        "subsections": [
-                            {
-                                "title": "重点分析",
-                                "content_from": []
-                            },
-                            {
-                                "title": "数据解读",
-                                "content_from": []
-                            }
-                        ]
-                    },
-                    {
-                        "title": "结论与建议",
-                        "subsections": [
-                            {
-                                "title": "结论",
-                                "content_from": []
-                            },
-                            {
-                                "title": "建议",
-                                "content_from": []
-                            }
-                        ]
-                    }
-                ]
-            }
+            return None
     else:
-        # 提供一个基本大纲作为后备
-        return {
-            "title": "自动生成的报告",
-            "subtitle": "基于工作区文件的分析",
-            "sections": [
-                {
-                    "title": "概述",
-                    "subsections": [
-                        {
-                            "title": "背景",
-                            "content_from": []
-                        },
-                        {
-                            "title": "主要发现",
-                            "content_from": []
-                        }
-                    ]
-                },
-                {
-                    "title": "详细内容",
-                    "subsections": [
-                        {
-                            "title": "重点分析",
-                            "content_from": []
-                        },
-                        {
-                            "title": "数据解读",
-                            "content_from": []
-                        }
-                    ]
-                },
-                {
-                    "title": "结论与建议",
-                    "subsections": [
-                        {
-                            "title": "结论",
-                            "content_from": []
-                        },
-                        {
-                            "title": "建议",
-                            "content_from": []
-                        }
-                    ]
-                }
-            ]
-        }
+        print("从LLM获取大纲响应失败")
+        return None
 
 def convert_markdown_to_html(text):
     """将Markdown格式的文本转换为HTML格式"""
@@ -437,7 +340,7 @@ def convert_markdown_to_html(text):
             # 完全失败时，至少保证换行被转换
             return text.replace('\n', '<br>')
 
-def reorganize_content(text_files, outline):
+def reorganize_content(text_files, outline, user_query=""):
     """根据大纲重新组织内容，使用多线程并行处理LLM请求"""
     print("正在根据大纲重新组织内容...")
     filename_to_content = {file['filename']: file['content'] for file in text_files}
@@ -452,6 +355,9 @@ def reorganize_content(text_files, outline):
     progress_lock = threading.Lock()
     
     print(f"总共需要处理 {total_subsections} 个子章节")
+    
+    # 判断用户查询的语言
+    is_chinese = bool(re.search(r'[\u4e00-\u9fff]', user_query)) if user_query else True
     
     def process_subsection(section_idx, section, subsection_idx, subsection):
         """处理单个子章节的函数，将在独立线程中运行"""
@@ -472,7 +378,9 @@ def reorganize_content(text_files, outline):
                     if filename in filename_to_content:
                         relevant_content += filename_to_content[filename] + "\n\n"
             
-            prompt = f"""请根据以下原始内容撰写一个关于"{subsection['title']}"的子章节内容。内容应该是连贯的，格式良好的段落，尽量提取和组织所有相关的信息，尽量保留数据相关的原始内容，请确保数据和内容完全与原始内容一致，不要篡改。
+            # 根据用户查询语言选择合适的提示语
+            if is_chinese:
+                prompt = f"""请根据以下原始内容撰写一个关于"{subsection['title']}"的子章节内容。内容应该是连贯的，格式良好的段落，尽量提取和组织所有相关的信息，尽量保留数据相关的原始内容，请确保数据和内容完全与原始内容一致，不要篡改。
 
 重要说明：请不要在内容中再次包含标题（如 "### {subsection['title']}"），因为标题会在最终报告中单独添加。
 
@@ -489,7 +397,27 @@ def reorganize_content(text_files, outline):
 {relevant_content}
 
 返回内容应该是结构良好的Markdown文本，每个段落都应该是完整的句子，且长度适当。
-注意：直接从正文内容开始撰写，确保撰写的语言（中文或英文）与标题语言一致，如果原始内容语言与标题语言不一致，请转换成标题语言。
+注意：直接从正文内容开始撰写，必须使用中文撰写内容。
+"""
+            else:
+                prompt = f"""Based on the following original content, please write subsection content about "{subsection['title']}". The content should be coherent, well-formatted paragraphs that extract and organize all relevant information, preserving data-related original content. Ensure the data and content are completely consistent with the original content, without alteration.
+
+Important note: Do not include the title (such as "### {subsection['title']}") in the content, as the title will be added separately in the final report.
+
+Please use Markdown format, with the following Markdown syntax to enhance readability:
+- Use #### and smaller heading levels to mark subsections (note: do not use #, ##, or ###, as these levels conflict with the document structure)
+- Use **text** to mark important content
+- Use 1. 2. 3. or * - + to create ordered or unordered lists
+- Use tables, quote blocks, and other Markdown elements when necessary
+
+Note: Output Markdown content directly, without wrapping it in code blocks (e.g., do not use ```markdown tags).
+Also make sure not to repeat the subsection title at the beginning of the content, as this will cause the title to be displayed twice.
+
+Original content:
+{relevant_content}
+
+The returned content should be well-structured Markdown text, with complete sentences in each paragraph and appropriate length.
+Note: Start writing directly from the body content, and you must write the content in English.
 """
             
             with progress_lock:
@@ -572,96 +500,187 @@ def reorganize_content(text_files, outline):
     print(f"所有 {total_subsections} 个子章节处理完成")
     return reorganized_sections
 
-def analyze_content_for_visualization(section_content):
-    """分析内容是否适合生成图表，并尝试提取真实数据"""
-    print("分析内容是否适合生成图表并提取数据...", end='', flush=True)
-    prompt = f"""分析以下文本内容，并判断是否适合生成数据可视化图表。如果适合，请:
-1. 指出适合的图表类型(可选多种类型):
-   - 折线图：适合展示时间趋势、连续数据变化
-   - 柱状图：适合类别比较、排名
-   - 饼图：适合显示占比、构成
-   - 散点图：适合展示相关性、分布关系
-   - 雷达图：适合多维度能力评估、特征比较
-   - 热力图：适合展示矩阵数据、复杂关系
-   - 地图：适合地理数据
-   - 气泡图：适合三维数据关系
-   - 树状图：适合层次结构数据
-   - 桑基图：适合流程、转化关系
-
-2. 从文本中提取真实数据的主要指标和维度
-3. 提供一个推荐的可视化标题
-4. 从文本中提取能够用于可视化的数值数据
-
-请注意，请根据数据特征选择最合适的图表类型。
+def analyze_content_for_visualization(section_content, user_query=""):
+    """分析内容是否适合生成图表，返回可视化信息"""
+    try:
+        # 判断用户查询的语言
+        is_chinese = bool(re.search(r'[\u4e00-\u9fff]', user_query)) if user_query else True
+        
+        if is_chinese:
+            prompt = f"""请分析以下文本内容，判断其是否包含可以通过图表可视化的数据。如果内容中包含可视化的数据，请提取这些数据并推荐合适的图表类型。
 
 内容：
 {section_content}
 
-请以JSON格式返回结果：
-{{
-    "suitable_for_visualization": true/false,
-    "chart_type": "图表类型",  # 请选择上面列出的图表类型之一，请只提供一个字符串，不要提供数组/列表
-    "data_metrics": ["指标1", "指标2", ...],
-    "data_dimensions": ["维度1", "维度2", ...],
-    "title": "图表标题",
-    "description": "图表描述和解释",
-    "extracted_data": [
-        {{
-            "dimension": "维度值",
-            "metrics": {{
-                "指标1": 数值1,
-                "指标2": 数值2
-            }}
-        }},
-        ...
-    ]
-}}
-请确保标题与描述等内容转换为英文描述。
-如果不适合生成图表，请将suitable_for_visualization设为false并简要说明原因。
-从文本中提取真实的数据，不要编造数据。如果文本中有表格或列表形式的数据，请尽可能完整地提取。
-如果文本中没有足够的数值数据，可以设置suitable_for_visualization为false。
+请回答以下问题：
 
-注意：
-1. chart_type必须是单个字符串，而不是数组或列表，请根据数据特征选择最适合的图表类型
-2. 你必须从文本中提取真实的数据，不要创建虚构的数据
-3. 如果提取到的数据项少于3个，请将suitable_for_visualization设为false，因为数据不足以生成有意义的图表
-4. 请优先考虑不常见的图表类型，如雷达图、热力图、气泡图等，而不要总是选择柱状图和饼图
+1. 这段内容是否包含可以进行可视化的数据？（回答是/否）
+2. 如果是，这些数据的主题是什么？
+3. 最适合展示这些数据的图表类型是什么？（如：折线图、柱状图、饼图、散点图、雷达图等）
+4. 这些数据中的独立变量（x轴）和依赖变量（y轴）分别是什么？
+5. 简要描述为什么选择这种图表类型以及它能展示哪些洞见？
+
+请以JSON格式返回结果，并确保包含数据点信息：
+{{
+    "suitable_for_visualization": true,
+    "theme": "数据主题",
+    "chart_type": "推荐的图表类型",
+    "variables": {{
+        "x_axis": "独立变量",
+        "y_axis": "依赖变量"
+    }},
+    "reason": "选择理由",
+    "data_points": [
+        {{
+            "category": "类别1",
+            "value": 100
+        }},
+        {{
+            "category": "类别2",
+            "value": 200
+        }}
+        // 请尽量提取所有可视化数据点
+    ],
+    "time_series": false  // 如果是时间序列数据，设为true
+}}
+
+如果内容不适合可视化，则返回：
+{{
+    "suitable_for_visualization": false,
+    "reason": "不适合可视化的原因"
+}}
 """
-    
-    response = ask_llm(prompt)
-    if response:
+        else:
+            prompt = f"""Please analyze the following text content and determine if it contains data that can be visualized through charts. If the content contains visualizable data, please extract this data and recommend an appropriate chart type.
+
+Content:
+{section_content}
+
+Please answer the following questions:
+
+1. Does this content contain data that can be visualized? (Answer yes/no)
+2. If yes, what is the theme of this data?
+3. What chart type is most suitable for displaying this data? (e.g.: line chart, bar chart, pie chart, scatter plot, radar chart, etc.)
+4. What are the independent variables (x-axis) and dependent variables (y-axis) in this data?
+5. Briefly describe why this chart type was chosen and what insights it can show?
+
+Please return the results in JSON format, ensuring you include data points:
+{{
+    "suitable_for_visualization": true,
+    "theme": "data theme",
+    "chart_type": "recommended chart type",
+    "variables": {{
+        "x_axis": "independent variable",
+        "y_axis": "dependent variable"
+    }},
+    "reason": "selection rationale",
+    "data_points": [
+        {{
+            "category": "category1",
+            "value": 100
+        }},
+        {{
+            "category": "category2",
+            "value": 200
+        }}
+        // Please try to extract all visualizable data points
+    ],
+    "time_series": false  // Set to true if it's time series data
+}}
+
+If the content is not suitable for visualization, then return:
+{{
+    "suitable_for_visualization": false,
+    "reason": "reason why it's not suitable for visualization"
+}}
+"""
+
+        response = ask_llm(prompt)
+        
+        # 处理JSON响应
         try:
             # 提取JSON部分
             json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
             if json_match:
                 json_str = json_match.group(1)
             else:
-                json_str = response
-            
-            result = json.loads(json_str)
-            
-            # 检查chart_type是否为列表，如果是，转换为字符串
-            if isinstance(result.get('chart_type'), list):
-                if result['chart_type']:  # 如果列表非空
-                    result['chart_type'] = result['chart_type'][0]  # 取第一个元素
-                else:
-                    result['chart_type'] = ''  # 空列表转为空字符串
-            
-            # 验证提取的数据是否足够
-            if result.get('suitable_for_visualization', False):
-                extracted_data = result.get('extracted_data', [])
-                if len(extracted_data) < 3:
-                    result['suitable_for_visualization'] = False
-                    result['reason'] = "提取到的数据点不足，无法生成有意义的图表"
+                json_str = response.strip()
                 
-            return result
+            # 清理可能导致JSON解析错误的字符
+            json_str = re.sub(r'```.*?```', '', json_str, flags=re.DOTALL)
+            
+            # 解析JSON
+            visualization_info = json.loads(json_str)
+            
+            # 确保必需的字段存在
+            if 'suitable_for_visualization' not in visualization_info:
+                raise ValueError("JSON缺少'suitable_for_visualization'字段")
+                
+            if visualization_info['suitable_for_visualization']:
+                # 处理数据点
+                if 'data_points' not in visualization_info:
+                    visualization_info['data_points'] = []
+                
+                # 确保提取的数据也存在
+                extracted_data = []
+                
+                # 将data_points转换为适合处理的格式
+                for point in visualization_info.get('data_points', []):
+                    if isinstance(point, dict) and 'category' in point and 'value' in point:
+                        extracted_item = {
+                            'dimension': point['category'],
+                            'metrics': {'value': point['value']}
+                        }
+                        extracted_data.append(extracted_item)
+                
+                # 设置提取的数据
+                visualization_info['extracted_data'] = extracted_data
+                
+                # 设置数据指标和维度
+                visualization_info['data_metrics'] = ['value']
+                visualization_info['data_dimensions'] = [visualization_info.get('variables', {}).get('x_axis', '类别' if is_chinese else 'Category')]
+                
+                # 其他字段的处理
+                if 'variables' not in visualization_info:
+                    visualization_info['variables'] = {
+                        'x_axis': 'Category',
+                        'y_axis': 'Value'
+                    }
+                    
+                if 'time_series' not in visualization_info:
+                    visualization_info['time_series'] = False
+                    
+                # 提取数据主题
+                if 'theme' not in visualization_info or not visualization_info['theme']:
+                    visualization_info['theme'] = '数据可视化' if is_chinese else 'Data Visualization'
+                
+                # 添加标题和描述
+                if 'title' not in visualization_info:
+                    visualization_info['title'] = visualization_info.get('theme', '数据可视化' if is_chinese else 'Data Visualization')
+                
+                if 'description' not in visualization_info:
+                    visualization_info['description'] = visualization_info.get('reason', '')
+            
+            return visualization_info
+                
+        except json.JSONDecodeError as e:
+            # 返回一个默认的响应
+            return {
+                'suitable_for_visualization': False,
+                'reason': f"JSON解析错误: {str(e)}"
+            }
         except Exception as e:
-            print(f"解析可视化JSON时出错: {str(e)}")
-            traceback.print_exc()  # 打印完整堆栈跟踪
-            return {"suitable_for_visualization": False, "reason": "解析结果出错"}
-    else:
-        return {"suitable_for_visualization": False, "reason": "LLM未返回结果"}
-
+            # 返回一个默认的响应
+            return {
+                'suitable_for_visualization': False,
+                'reason': f"处理错误: {str(e)}"
+            }
+        
+    except Exception as e:
+        return {
+            'suitable_for_visualization': False,
+            'reason': f"分析错误: {str(e)}"
+        }
 
 def generate_sample_data(visualization_info):
     """从提取的真实数据生成可视化数据集"""
@@ -681,7 +700,6 @@ def generate_sample_data(visualization_info):
         
         # 如果没有提取到数据，返回None
         if not extracted_data:
-            print(" 失败：未提取到数据")
             return None
             
         # 获取指标和维度
@@ -714,12 +732,10 @@ def generate_sample_data(visualization_info):
                         data[metric_name].append(float(metric_value))
                     except (ValueError, TypeError):
                         # 如果无法转换为数字，使用0（并记录警告）
-                        print(f"\n警告: 无法将 '{metric_value}' 转换为数值，使用0替代")
                         data[metric_name].append(0.0)
         
         # 如果数据为空或维度值为空，返回None
         if not data or not dimension_values:
-            print(" 失败：处理后的数据为空")
             return None
             
         # 创建Pandas DataFrame
@@ -739,15 +755,12 @@ def generate_sample_data(visualization_info):
         
         # 确保数据框至少有一行一列
         if df.shape[0] == 0 or df.shape[1] == 0:
-            print(" 失败：生成的数据框为空")
             return None
             
         print(" 成功")
         return df
     
     except Exception as e:
-        print(f" 失败")
-        print(f"处理数据时出错: {str(e)}")
         traceback.print_exc()
         return None
 
@@ -807,15 +820,40 @@ def create_visualization(visualization_info, chart_types):
     
     # 创建可视化
     try:
-        title = visualization_info.get('title', '数据可视化')
-        description = visualization_info.get('description', '图表描述')
+        title = visualization_info.get('title', 'Data Visualization')
+        description = visualization_info.get('description', 'Chart Description')
         
-        # 定义莫兰迪色系配色方案 - 柔和、低饱和度、优雅的色彩
-        morandi_palette = [
-            '#E4D6D3', '#E8E6DA', '#D1CCBC', '#BFC0B2', '#A6A394', 
-            '#C9D0CB', '#B8C7CE', '#D4CAC4', '#C7BDB3', '#A5AEA6',
-            '#889E94', '#9C8F8F', '#C3BDC0', '#A6978F', '#D8CACD'
+        # 使用用户提供的配色方案
+        custom_palette = [
+            '#4E5D6C',  # 深蓝灰色
+            '#8FA1B3',  # 中蓝灰色 
+            '#B3B3B3',  # 浅灰色
+            '#D9A679',  # 浅棕色
+            '#A6785E',  # 深棕色
+            '#6B7C8C',  # 蓝灰色变种
+            '#C8D3E0',  # 浅蓝灰色
+            '#DECCB8',  # 浅棕米色
+            '#896A53',  # 咖啡棕色
+            '#5D7A96'   # 钴蓝色
         ]
+        
+        # 创建扩展调色板，在主色的基础上加入衍生色
+        extended_palette = custom_palette.copy()
+        # 添加衍生色 - 将每种颜色调亮一些
+        for color in custom_palette:
+            # 将16进制颜色转换为RGB，再调亮，再转回16进制
+            r = min(255, int(color[1:3], 16) + 20)
+            g = min(255, int(color[3:5], 16) + 20)
+            b = min(255, int(color[5:7], 16) + 20)
+            lighter_color = f'#{r:02x}{g:02x}{b:02x}'
+            extended_palette.append(lighter_color)
+            
+            # 添加暗色变种
+            r = max(0, int(color[1:3], 16) - 20)
+            g = max(0, int(color[3:5], 16) - 20)
+            b = max(0, int(color[5:7], 16) - 20)
+            darker_color = f'#{r:02x}{g:02x}{b:02x}'
+            extended_palette.append(darker_color)
         
         # 创建交互式plotly图表
         fig = None
@@ -825,15 +863,15 @@ def create_visualization(visualization_info, chart_types):
             if isinstance(sample_data.index, pd.DatetimeIndex):
                 # 时间序列数据
                 fig = px.line(sample_data, x=sample_data.index, y=sample_data.columns,
-                            title=title, labels={'value': '数值', 'variable': '指标'},
-                            color_discrete_sequence=morandi_palette)
+                            title=title, labels={'value': 'Value', 'variable': 'Metric'},
+                            color_discrete_sequence=custom_palette)
             else:
                 # 非时间序列数据
                 # 转置数据以便更好地展示
                 df_melted = sample_data.reset_index().melt(id_vars='index')
                 fig = px.line(df_melted, x='index', y='value', color='variable',
-                            title=title, labels={'index': '类别', 'value': '数值', 'variable': '指标'},
-                            color_discrete_sequence=morandi_palette)
+                            title=title, labels={'index': 'Category', 'value': 'Value', 'variable': 'Metric'},
+                            color_discrete_sequence=custom_palette)
                 
             fig.update_layout(
                 hovermode='x unified',
@@ -852,9 +890,17 @@ def create_visualization(visualization_info, chart_types):
         elif chart_type in ['柱状图', '条形图', 'bar chart', 'bar graph', 'histogram']:
             # 柱状图
             df_melted = sample_data.reset_index().melt(id_vars='index')
-            fig = px.bar(df_melted, x='index', y='value', color='variable',
-                        title=title, labels={'index': '类别', 'value': '数值', 'variable': '指标'},
-                        barmode='group', color_discrete_sequence=morandi_palette)
+            
+            if 'variable' in df_melted.columns:
+                # 使用variable分组，为每个组分配不同颜色
+                fig = px.bar(df_melted, x='index', y='value', color='variable',
+                            title=title, labels={'index': 'Category', 'value': 'Value', 'variable': 'Metric'},
+                            barmode='group', color_discrete_sequence=custom_palette)
+            else:
+                # 为每个柱子分配不同颜色
+                fig = px.bar(df_melted, x='index', y='value',
+                            title=title, labels={'index': 'Category', 'value': 'Value'},
+                            color='index', color_discrete_sequence=custom_palette)
             
             fig.update_layout(
                 plot_bgcolor='rgba(245,245,242,0.2)',
@@ -875,7 +921,7 @@ def create_visualization(visualization_info, chart_types):
             if sample_data.shape[1] >= 1:
                 column = sample_data.columns[0]
                 fig = px.pie(sample_data, values=column, names=sample_data.index,
-                            title=title, color_discrete_sequence=morandi_palette)
+                            title=title, color_discrete_sequence=extended_palette)
                 
                 fig.update_traces(
                     textposition='inside', 
@@ -901,22 +947,37 @@ def create_visualization(visualization_info, chart_types):
             if sample_data.shape[1] >= 2:
                 x_col, y_col = sample_data.columns[0], sample_data.columns[1]
                 
-                # 如果有第三列，使用它作为大小
+                # 使用额外的列作为分类变量以分配不同颜色
+                color_col = None
                 size_col = None
+                
                 if sample_data.shape[1] >= 3:
                     size_col = sample_data.columns[2]
-                    fig = px.scatter(sample_data, x=x_col, y=y_col, size=size_col,
-                                    title=title, labels={x_col: x_col, y_col: y_col, size_col: size_col},
-                                    color_discrete_sequence=[morandi_palette[0]])
+                    
+                    if sample_data.shape[1] >= 4:
+                        color_col = sample_data.columns[3]
+                        fig = px.scatter(sample_data, x=x_col, y=y_col, size=size_col, color=color_col,
+                                        title=title, labels={x_col: x_col, y_col: y_col, size_col: size_col, color_col: color_col},
+                                        color_discrete_sequence=custom_palette)
+                    else:
+                        # 创建一个颜色变量以便在没有分类变量的情况下为点分配不同颜色
+                        sample_data_copy = sample_data.copy()
+                        sample_data_copy['color_group'] = [f'Group {i+1}' for i in range(len(sample_data_copy))]
+                        fig = px.scatter(sample_data_copy, x=x_col, y=y_col, size=size_col, color='color_group',
+                                        title=title, labels={x_col: x_col, y_col: y_col, size_col: size_col},
+                                        color_discrete_sequence=custom_palette)
                 else:
-                    fig = px.scatter(sample_data, x=x_col, y=y_col, 
+                    # 创建一个颜色变量以便在没有分类变量的情况下为点分配不同颜色
+                    sample_data_copy = sample_data.copy()
+                    sample_data_copy['color_group'] = [f'Group {i+1}' for i in range(len(sample_data_copy))]
+                    fig = px.scatter(sample_data_copy, x=x_col, y=y_col, color='color_group',
                                     title=title, labels={x_col: x_col, y_col: y_col},
-                                    color_discrete_sequence=[morandi_palette[0]])
+                                    color_discrete_sequence=custom_palette)
                 
                 # 添加趋势线
                 fig.update_traces(
                     marker=dict(
-                        size=10,
+                        size=10 if size_col is None else None,
                         line=dict(width=1, color='white'),
                         opacity=0.75
                     )
@@ -927,8 +988,8 @@ def create_visualization(visualization_info, chart_types):
                     x=sample_data[x_col], 
                     y=sample_data[x_col] * sample_data[y_col].mean() / sample_data[x_col].mean(),
                     mode='lines', 
-                    name='趋势线',
-                    line=dict(color=morandi_palette[1], width=2, dash='dash')
+                    name='Trend Line',
+                    line=dict(color=custom_palette[1], width=2, dash='dash')
                 ))
                 
                 fig.update_layout(
@@ -958,8 +1019,8 @@ def create_visualization(visualization_info, chart_types):
                         theta=categories,
                         fill='toself',
                         name=str(idx),
-                        line_color=morandi_palette[i % len(morandi_palette)],
-                        fillcolor=morandi_palette[i % len(morandi_palette)],
+                        line_color=custom_palette[i % len(custom_palette)],
+                        fillcolor=custom_palette[i % len(custom_palette)],
                         opacity=0.6
                     ))
                 
@@ -968,385 +1029,191 @@ def create_visualization(visualization_info, chart_types):
                     polar=dict(
                         radialaxis=dict(
                             visible=True,
-                            range=[0, max([max(sample_data[col]) for col in sample_data.columns]) * 1.1]
+                            range=[0, sample_data.values.max() * 1.1]
                         )
                     ),
-                    showlegend=True,
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=1.02,
-                        xanchor="right",
-                        x=1
-                    ),
-                    paper_bgcolor='white'
+                    showlegend=True
                 )
             else:
                 return None
         
         elif chart_type in ['热力图', 'heatmap', 'heat map']:
-            # 热力图 - 使用整个数据框作为矩阵
+            # 热力图
+            # 为热力图创建渐变色配色方案
+            colorscale = [
+                [0, custom_palette[0]],      # 起始颜色
+                [0.25, custom_palette[1]],   # 1/4处颜色
+                [0.5, custom_palette[2]],    # 中间颜色
+                [0.75, custom_palette[3]],   # 3/4处颜色
+                [1, custom_palette[4]]       # 结束颜色
+            ]
+            
             fig = px.imshow(sample_data, 
-                            title=title,
-                            labels=dict(x="类别", y="指标", color="数值"),
-                            color_continuous_scale=px.colors.sequential.Turbid)  # 使用接近莫兰迪色系的配色
+                          title=title,
+                          labels=dict(x='Category', y='Metrics', color='Value'),
+                          color_continuous_scale=colorscale)
             
             fig.update_layout(
                 plot_bgcolor='rgba(245,245,242,0.2)',
-                paper_bgcolor='white',
-                xaxis=dict(side="bottom"),
+                paper_bgcolor='white'
             )
-            
-            # 添加文本标注
-            annotations = []
-            for i, row in enumerate(sample_data.index):
-                for j, col in enumerate(sample_data.columns):
-                    annotations.append(dict(
-                        x=col,
-                        y=row,
-                        text=str(round(sample_data.iloc[i, j], 2)),
-                        showarrow=False,
-                        font=dict(
-                            color="black" if 0.2 < sample_data.iloc[i, j] / sample_data.values.max() < 0.8 else "white"
-                        )
-                    ))
-                    
-            fig.update_layout(annotations=annotations)
         
         elif chart_type in ['气泡图', 'bubble chart', 'bubble plot']:
             # 气泡图 - 需要至少三列数据
             if sample_data.shape[1] >= 3:
-                x_col, y_col, size_col = sample_data.columns[0], sample_data.columns[1], sample_data.columns[2]
+                cols = sample_data.columns.tolist()
+                x_col, y_col, size_col = cols[0], cols[1], cols[2]
                 
-                # 如果有第四列，用作颜色
+                # 第四列作为颜色 (如果有)
+                color_col = None
                 if sample_data.shape[1] >= 4:
-                    color_col = sample_data.columns[3]
-                    fig = px.scatter(sample_data, x=x_col, y=y_col, 
-                                    size=size_col, color=color_col,
+                    color_col = cols[3]
+                    fig = px.scatter(sample_data, x=x_col, y=y_col, size=size_col, color=color_col,
                                     title=title, 
-                                    labels={x_col: x_col, y_col: y_col, size_col: size_col, color_col: color_col},
-                                    color_continuous_scale=px.colors.sequential.Turbid,  # 使用接近莫兰迪色系的配色
-                                    size_max=30)
+                                    labels={x_col: x_col, y_col: y_col, size_col: 'Size', color_col: 'Group'},
+                                    color_discrete_sequence=custom_palette)
                 else:
-                    fig = px.scatter(sample_data, x=x_col, y=y_col, 
-                                    size=size_col, color=sample_data.index,
+                    fig = px.scatter(sample_data, x=x_col, y=y_col, size=size_col,
                                     title=title, 
-                                    labels={x_col: x_col, y_col: y_col, size_col: size_col},
-                                    color_discrete_sequence=morandi_palette,
-                                    size_max=30)
+                                    labels={x_col: x_col, y_col: y_col, size_col: 'Size'},
+                                    color_discrete_sequence=custom_palette)
                 
-                # 更新气泡样式
                 fig.update_traces(
                     marker=dict(
                         line=dict(width=1, color='white'),
-                        opacity=0.7
+                        opacity=0.7,
+                        sizemode='area',
+                        sizeref=2.*max(sample_data[size_col])/(40.**2),
+                        sizemin=4
                     )
                 )
                 
                 fig.update_layout(
                     plot_bgcolor='rgba(245,245,242,0.2)',
-                    paper_bgcolor='white',
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=1.02,
-                        xanchor="right",
-                        x=1
-                    )
+                    paper_bgcolor='white'
                 )
             else:
                 return None
         
         elif chart_type in ['树状图', 'treemap', 'tree map']:
             # 树状图
-            # 需要调整数据格式
             df_melted = sample_data.reset_index().melt(id_vars='index')
-            
-            fig = px.treemap(df_melted, 
-                           path=['variable', 'index'], 
-                           values='value',
-                           title=title,
-                           color_discrete_sequence=morandi_palette)
-            
-            fig.update_layout(
-                paper_bgcolor='white',
-                margin=dict(t=50, l=25, r=25, b=25)
+            fig = px.treemap(
+                df_melted, 
+                path=['variable', 'index'], 
+                values='value',
+                title=title,
+                color_discrete_sequence=extended_palette
             )
             
             fig.update_traces(
-                marker=dict(
-                    line=dict(width=1, color='white')
-                ),
                 textinfo='label+value',
-                textfont=dict(size=12)
+                marker=dict(line=dict(width=1, color='white'))
+            )
+            
+            fig.update_layout(
+                margin=dict(l=0, r=0, t=30, b=0)
             )
         
         elif chart_type in ['桑基图', 'sankey diagram', 'sankey chart']:
-            # 桑基图
-            # 需要调整数据格式，确保数据适合桑基图
-            if sample_data.shape[1] >= 2:
-                df_links = pd.DataFrame()
+            # 桑基图 - 需要特殊处理数据
+            if sample_data.shape[1] >= 2 and sample_data.shape[0] >= 3:
+                # 准备节点和链接
+                nodes = []
+                links = []
                 
-                # 尝试创建源-目标-值格式
+                # 为简化起见，使用第一列和其他列的关系
                 source_col = sample_data.columns[0]
-                target_col = sample_data.columns[1]
+                for i, target_col in enumerate(sample_data.columns[1:], 1):
+                    for idx in sample_data.index:
+                        source_val = f"{source_col}: {idx}"
+                        target_val = f"{target_col}: {sample_data.loc[idx, target_col]}"
+                        value = sample_data.loc[idx, source_col]
+                        
+                        if source_val not in nodes:
+                            nodes.append(source_val)
+                        if target_val not in nodes:
+                            nodes.append(target_val)
+                            
+                        links.append({
+                            'source': nodes.index(source_val),
+                            'target': nodes.index(target_val),
+                            'value': value
+                        })
                 
-                # 如果有第三列用作值，否则使用常数
-                if sample_data.shape[1] >= 3:
-                    value_col = sample_data.columns[2]
-                    df_links['source'] = sample_data[source_col].astype(str)
-                    df_links['target'] = sample_data[target_col].astype(str)
-                    df_links['value'] = sample_data[value_col]
-                else:
-                    df_links['source'] = sample_data[source_col].astype(str)
-                    df_links['target'] = sample_data[target_col].astype(str)
-                    df_links['value'] = 1
+                # 为节点分配不同的颜色
+                node_colors = []
+                for i in range(len(nodes)):
+                    node_colors.append(extended_palette[i % len(extended_palette)])
                 
-                # 创建节点和链接
-                node_labels = pd.unique(df_links[['source', 'target']].values.ravel('K'))
-                nodes = [{'name': str(label)} for label in node_labels]
-                
-                # 创建源和目标索引
-                source_indices = [list(node_labels).index(source) for source in df_links['source']]
-                target_indices = [list(node_labels).index(target) for target in df_links['target']]
-                
+                # 创建桑基图
                 fig = go.Figure(data=[go.Sankey(
                     node=dict(
                         pad=15,
                         thickness=20,
-                        line=dict(color='white', width=0.5),
-                        label=[node['name'] for node in nodes],
-                        color=[morandi_palette[i % len(morandi_palette)] for i in range(len(nodes))]
+                        line=dict(color='black', width=0.5),
+                        label=nodes,
+                        color=node_colors
                     ),
                     link=dict(
-                        source=source_indices,
-                        target=target_indices,
-                        value=df_links['value'],
-                        color=[f"rgba({','.join(str(int(int(color[1:3], 16)/1.5)) for color in morandi_palette)},0.4)" for color in morandi_palette[:len(df_links)]]
+                        source=[link['source'] for link in links],
+                        target=[link['target'] for link in links],
+                        value=[link['value'] for link in links],
+                        color=[f'rgba({int(custom_palette[0][1:3], 16)},{int(custom_palette[0][3:5], 16)},{int(custom_palette[0][5:7], 16)},0.3)' for _ in links]
                     )
                 )])
                 
                 fig.update_layout(
                     title=title,
-                    paper_bgcolor='white',
-                    font=dict(size=12)
+                    font=dict(size=10),
+                    paper_bgcolor='white'
                 )
             else:
                 return None
         
-        else:  # 默认使用柱状图
-            df_melted = sample_data.reset_index().melt(id_vars='index')
-            fig = px.bar(df_melted, x='index', y='value', color='variable',
-                        title=title, labels={'index': '类别', 'value': '数值', 'variable': '指标'},
-                        barmode='group', color_discrete_sequence=morandi_palette)
-            
-            fig.update_layout(
-                plot_bgcolor='rgba(245,245,242,0.2)',
-                paper_bgcolor='white',
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                )
-            )
-            # 为柱状图添加轮廓，增强视觉效果
-            fig.update_traces(marker_line_color='white', marker_line_width=1, opacity=0.85)
+        # 如果没有创建图表，返回None
+        if fig is None:
+            print(" 失败：不支持的图表类型")
+            return None
         
-        # 通用的布局设置，适用于所有图表类型
+        # 设置通用布局属性
         fig.update_layout(
-            font=dict(family="Microsoft YaHei, SimHei, Arial Unicode MS"),
-            template="plotly_white",
-            hoverlabel=dict(font_size=14, font_family="Microsoft YaHei, SimHei", bgcolor="white", bordercolor="#666"),
-            margin=dict(l=50, r=50, t=80, b=50),
-            title=dict(
-                font=dict(size=20, color="#333"),
-                x=0.5
-            ),
-            xaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(200,200,200,0.3)',
-                showline=True,
-                linewidth=1,
-                linecolor='rgba(200,200,200,0.8)',
-                title_font=dict(size=14)
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(200,200,200,0.3)',
-                showline=True,
-                linewidth=1,
-                linecolor='rgba(200,200,200,0.8)',
-                title_font=dict(size=14)
+            title=dict(text=title, font=dict(size=20, family='Inter, sans-serif')),
+            font=dict(family='Inter, sans-serif'),
+            margin=dict(l=40, r=40, t=60, b=60),
+            hoverlabel=dict(
+                bgcolor='white',
+                font_size=12,
+                font_family='Inter, sans-serif'
             )
         )
         
-        # 将图表转换为HTML
-        chart_html = pio.to_html(fig, full_html=False, include_plotlyjs='cdn')
+        # 保存交互式HTML
+        html_io = io.StringIO()
+        fig.write_html(html_io, include_plotlyjs='cdn', full_html=False)
+        chart_html = html_io.getvalue()
         
-        # 同时也保存静态图像作为备份
-        buffer = BytesIO()
-        fig.write_image(buffer, format='png', width=800, height=500, scale=2)
-        buffer.seek(0)
-        image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+        # 保存为静态图像
+        img_bytes = fig.to_image(format="png", width=800, height=500, scale=2)
+        img_base64 = base64.b64encode(img_bytes).decode('utf-8')
         
         print(" 成功")
-        return {
+        
+        # 准备返回数据
+        result = {
             'title': title,
             'description': description,
-            'image_base64': image_base64,  # 保留静态图像作为备份
-            'chart_html': chart_html,      # 添加交互式图表HTML
             'chart_type': chart_type,
+            'image_base64': img_base64,
+            'chart_html': chart_html,
             'is_interactive': True
         }
-    
+        
+        return result
+        
     except Exception as e:
         traceback.print_exc()
-        
-        # 尝试回退到静态图表
-        try:
-            # 减小图表尺寸为原来的一半
-            plt.figure(figsize=(5, 3))
-            
-            # 确保使用配置的中文字体
-            configure_matplotlib_fonts()
-            
-            # 设置静态图表的莫兰迪色系配色方案
-            morandi_colors = ['#E4D6D3', '#E8E6DA', '#D1CCBC', '#BFC0B2', '#A6A394', '#C9D0CB']
-            plt.rcParams['axes.prop_cycle'] = plt.cycler(color=morandi_colors)
-            
-            if chart_type in ['折线图', '线图', 'line chart', 'line graph', 'line plot']:
-                ax = sample_data.plot(kind='line', marker='o', linewidth=2)
-                plt.xlabel('日期' if isinstance(sample_data.index, pd.DatetimeIndex) else '类别')
-                plt.ylabel('数值')
-                plt.grid(True, alpha=0.3)
-                plt.legend(title='指标', fontsize='small')
-            
-            elif chart_type in ['柱状图', '条形图', 'bar chart', 'bar graph', 'histogram']:
-                ax = sample_data.plot(kind='bar', edgecolor='white', linewidth=0.8)
-                plt.xlabel('类别')
-                plt.ylabel('数值')
-                plt.legend(title='指标', fontsize='small')
-                plt.xticks(rotation=45, fontsize='small')
-                plt.grid(axis='y', alpha=0.3)
-            
-            elif chart_type in ['饼图', '圆饼图', 'pie chart']:
-                if sample_data.shape[1] >= 1:
-                    column = sample_data.columns[0]
-                    ax = sample_data[column].plot(kind='pie', autopct='%1.1f%%', 
-                                                wedgeprops=dict(width=0.6, edgecolor='white', linewidth=1))
-                    plt.ylabel('')
-                else:
-                    return None
-            
-            elif chart_type in ['散点图', 'scatter plot', 'scatter graph']:
-                if sample_data.shape[1] >= 2:
-                    x_col, y_col = sample_data.columns[0], sample_data.columns[1]
-                    plt.scatter(sample_data[x_col], sample_data[y_col], 
-                              s=80, alpha=0.7, edgecolors='white', linewidths=0.5, 
-                              c=morandi_colors[0])
-                    # 添加趋势线
-                    z = np.polyfit(sample_data[x_col], sample_data[y_col], 1)
-                    p = np.poly1d(z)
-                    plt.plot(sample_data[x_col], p(sample_data[x_col]), 
-                           '--', color=morandi_colors[1], linewidth=2)
-                    plt.xlabel(x_col)
-                    plt.ylabel(y_col)
-                    plt.grid(True, alpha=0.3)
-                else:
-                    return None
-            
-            elif chart_type in ['雷达图', 'radar chart', 'radar plot', 'spider chart']:
-                # 静态雷达图需要极坐标
-                if sample_data.shape[1] >= 2:
-                    # 设置图形为极坐标
-                    fig = plt.figure(figsize=(6, 6))
-                    ax = fig.add_subplot(111, polar=True)
-                    
-                    # 获取特征数量
-                    categories = sample_data.columns.tolist()
-                    N = len(categories)
-                    
-                    # 计算每个特征的角度
-                    angles = [n / float(N) * 2 * np.pi for n in range(N)]
-                    angles += angles[:1]  # 闭合多边形
-                    
-                    # 绘制每个实例的雷达图
-                    for i, idx in enumerate(sample_data.index):
-                        values = sample_data.loc[idx].tolist()
-                        values += values[:1]  # 闭合多边形
-                        ax.plot(angles, values, linewidth=1.5, linestyle='solid', label=str(idx), color=morandi_colors[i % len(morandi_colors)])
-                        ax.fill(angles, values, alpha=0.25, color=morandi_colors[i % len(morandi_colors)])
-                    
-                    # 设置雷达图样式
-                    plt.xticks(angles[:-1], categories, size=8)
-                    ax.set_rlabel_position(0)
-                    plt.legend(loc='upper right', bbox_to_anchor=(0.1, 0.1))
-                else:
-                    return None
-            
-            elif chart_type in ['热力图', 'heatmap', 'heat map']:
-                # 静态热力图
-                fig, ax = plt.subplots(figsize=(8, 6))
-                sns.heatmap(sample_data, annot=True, fmt=".2f", cmap="YlGnBu", ax=ax, linewidths=0.5)
-                plt.xlabel('指标')
-                plt.ylabel('维度')
-                plt.tight_layout()
-            
-            elif chart_type in ['气泡图', 'bubble chart', 'bubble plot']:
-                if sample_data.shape[1] >= 3:
-                    x_col, y_col, size_col = sample_data.columns[0], sample_data.columns[1], sample_data.columns[2]
-                    # 计算气泡大小比例
-                    sizes = sample_data[size_col].values
-                    sizes = 50 * (sizes - sizes.min()) / (sizes.max() - sizes.min() + 0.00001) + 20
-                    
-                    # 绘制气泡图
-                    plt.scatter(sample_data[x_col], sample_data[y_col], s=sizes, 
-                                alpha=0.7, edgecolors='white', linewidths=0.5,
-                                c=[morandi_colors[i % len(morandi_colors)] for i in range(len(sample_data))])
-                    
-                    plt.xlabel(x_col)
-                    plt.ylabel(y_col)
-                    # 添加大小图例
-                    plt.title(f"{title}\n圆圈大小代表: {size_col}")
-                    plt.grid(True, alpha=0.3)
-                else:
-                    return None
-            
-            else:  # 默认柱状图
-                ax = sample_data.plot(kind='bar', edgecolor='white', linewidth=0.8)
-                plt.xlabel('类别')
-                plt.ylabel('数值')
-                plt.legend(title='指标', fontsize='small')
-                plt.xticks(rotation=45, fontsize='small')
-                plt.grid(axis='y', alpha=0.3)
-            
-            # 美化标题和整体样式
-            plt.title(title, fontsize='medium', pad=10, fontweight='bold')
-            plt.tight_layout()
-            
-            # 设置图表底色
-            ax = plt.gca()
-            ax.set_facecolor('#f8f9fa')
-            
-            # 将图表转换为base64字符串
-            buffer = BytesIO()
-            plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', facecolor='#ffffff')
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
-            plt.close()
-            
-            print(" 成功")
-            return {
-                'title': title,
-                'description': description,
-                'image_base64': image_base64,
-                'chart_type': chart_type,
-                'is_interactive': False
-            }
-        except Exception as sub_e:
-            return None
+        return None
 
 def generate_chart_code_template(visualization_info):
     """生成图表代码模板"""
@@ -1535,10 +1402,15 @@ def create_chart(data, chart_type='bar'):
     
     return code
 
-def ask_model_for_parameters():
+def ask_model_for_parameters(user_query=""):
     """与大模型交互获取报告生成参数"""
     try:
-        prompt = """
+        # 判断用户查询的语言
+        is_chinese = bool(re.search(r'[\u4e00-\u9fff]', user_query)) if user_query else True
+        
+        # 根据用户查询语言选择提示语言
+        if is_chinese:
+            prompt = """
 我需要为您生成HTML报告，请提供以下参数（如果您不指定某个参数，我将使用默认值）：
 
 1. 报告标题：您希望的报告标题是什么？
@@ -1558,6 +1430,28 @@ def ask_model_for_parameters():
 4. 输出文件名前缀：您希望的HTML文件名前缀是什么？（不含扩展名）
 
 请按上述顺序提供您的选择，或直接表示使用全部默认值。
+"""
+        else:
+            prompt = """
+I need to generate an HTML report for you. Please provide the following parameters (if you don't specify a parameter, I will use the default value):
+
+1. Report Title: What title would you like for the report?
+2. Include Data Visualization Charts: yes/no (default yes)
+3. Chart Types to Generate: Options include:
+   - all (all types)
+   - line (line charts)
+   - bar (bar charts)
+   - pie (pie charts)
+   - scatter (scatter plots)
+   - radar (radar charts)
+   - heatmap (heat maps)
+   - bubble (bubble charts)
+   - treemap (tree maps)
+   - sankey (sankey diagrams)
+   or a combination of these
+4. Output Filename Prefix: What prefix would you like for the HTML file name? (without extension)
+
+Please provide your choices in the order above, or simply indicate to use all default values.
 """
         
         response = ask_llm(prompt)
@@ -1632,80 +1526,129 @@ def get_apple_theme():
         'chart_bg': '#F5F5F7'            # 图表背景浅灰色
     }
 
-def extract_key_metrics(content):
-    """从内容中提取关键指标并创建HTML指标卡片"""
+def extract_key_metrics(content, user_query=""):
+    """从内容中提取关键指标"""
     try:
-        prompt = f"""请从以下文本内容中提取3-5个关键数值指标或重要统计数据。
-每个指标需要包含一个数值、指标名称和简短说明。如果找不到足够的明确数值指标，可以提取重要的结论或发现。
+        # 判断用户查询的语言
+        is_chinese = bool(re.search(r'[\u4e00-\u9fff]', user_query)) if user_query else True
+        
+        if is_chinese:
+            prompt = f"""请从以下内容中提取3-5个关键指标或数据点，这些指标应该是报告中最重要的量化数据。
 
 内容：
 {content}
 
-请以JSON格式返回结果：
-[
-    {{
-        "value": "数值或关键词",
-        "label": "指标名称",
-        "description": "简短解释（不超过15个字）",
-        "trend": "up/down/neutral"  # 可选，表示趋势
-    }},
-    ...
-]
+对于每个指标，请提供：
+1. 指标名称（简短描述，如"年增长率"、"客户满意度"等）
+2. 指标值（具体数值，包括单位）
+3. 变化趋势（如"上升"、"下降"、"稳定"等，如果适用）
+4. 指标的简短描述或解释
 
-仅返回JSON数组，不需要其他解释文本。如果找不到明确的数值指标，将value设为关键短语，将trend设为"neutral"。
-如果文本中没有明确指标，返回空数组 []。
+请以JSON格式返回结果：
+{{
+    "metrics": [
+        {{
+            "name": "指标名称",
+            "value": "指标值",
+            "trend": "变化趋势",
+            "description": "简短描述"
+        }},
+        ...
+    ]
+}}
+
+如果内容中没有合适的量化指标，请返回：
+{{
+    "metrics": []
+}}
 """
-        response = ask_llm(prompt)
-        if not response:
-            return []
-            
-        # 提取JSON部分
-        json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
         else:
-            # 尝试提取格式良好的JSON
-            json_str = response.strip()
-            
-        metrics = json.loads(json_str)
+            prompt = f"""Please extract 3-5 key metrics or data points from the following content. These metrics should be the most important quantitative data in the report.
+
+Content:
+{content}
+
+For each metric, please provide:
+1. Metric name (brief description, such as "Annual Growth Rate", "Customer Satisfaction", etc.)
+2. Metric value (specific value, including units)
+3. Change trend (such as "increasing", "decreasing", "stable", etc., if applicable)
+4. Brief description or explanation of the metric
+
+Please return the results in JSON format:
+{{
+    "metrics": [
+        {{
+            "name": "Metric Name",
+            "value": "Metric Value",
+            "trend": "Change Trend",
+            "description": "Brief Description"
+        }},
+        ...
+    ]
+}}
+
+If there are no suitable quantitative metrics in the content, please return:
+{{
+    "metrics": []
+}}
+"""
         
-        # 验证每个指标是否包含所需的字段
-        validated_metrics = []
-        for metric in metrics:
-            if 'value' in metric and 'label' in metric:
-                # 确保有description字段
-                if 'description' not in metric:
-                    metric['description'] = ''
-                    
-                # 确保有trend字段
-                if 'trend' not in metric:
-                    metric['trend'] = 'neutral'
-                    
-                validated_metrics.append(metric)
+        response = ask_llm(prompt)
+        
+        try:
+            # 提取JSON部分
+            json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_str = response
                 
-        return validated_metrics
+            # 清理可能导致JSON解析错误的字符
+            json_str = json_str.strip()
+            json_str = re.sub(r'```.*?```', '', json_str, flags=re.DOTALL)
+            
+            # 尝试解析JSON
+            metrics_data = json.loads(json_str)
+            
+            # 确保metrics字段存在
+            if 'metrics' not in metrics_data:
+                metrics_data = {'metrics': []}
+                
+            return metrics_data['metrics']
+        except json.JSONDecodeError as e:
+            print(f"解析指标JSON时出错: {str(e)}")
+            return []
+        except Exception as e:
+            print(f"处理指标时出错: {str(e)}")
+            return []
     except Exception as e:
         print(f"提取关键指标时出错: {str(e)}")
         return []
 
 def create_metric_cards_html(metrics):
-    """根据提取的指标创建HTML卡片布局"""
+    """将指标转换为HTML指标卡片"""
     if not metrics:
         return ""
-        
-    # 根据指标数量确定每行卡片数
-    cards_per_row = min(3, len(metrics))
     
-    # 生成指标卡片的HTML
+    # 根据指标数量确定每行卡片数
+    metrics_count = len(metrics)
+    if metrics_count <= 3:
+        cards_per_row = metrics_count
+    else:
+        cards_per_row = min(4, metrics_count)  # 最多4个卡片一行
+    
     cards_html = []
     for metric in metrics:
-        # 根据趋势确定图标和颜色
+        # 检查必需的字段是否存在
+        if 'name' not in metric or 'value' not in metric:
+            continue
+            
         trend_icon = ""
         trend_color = ""
-        if metric.get('trend') == 'up':
+        if metric.get('trend') == 'up' or metric.get('trend', '').lower() == 'increasing':
             trend_icon = "↑"
             trend_color = "var(--accent-color)"
-        elif metric.get('trend') == 'down':
+        elif metric.get('trend') == 'down' or metric.get('trend', '').lower() == 'decreasing':
             trend_icon = "↓"
             trend_color = "#FF9500"
         
@@ -1731,7 +1674,7 @@ def create_metric_cards_html(metrics):
         card = f"""
         <div class="metric-card">
             <div class="metric-header">
-                <div class="metric-label">{metric['label']}</div>
+                <div class="metric-label">{metric['name']}</div>
             </div>
             {value_html}
             <div class="metric-desc">{metric.get('description', '')}</div>
@@ -1750,37 +1693,41 @@ def create_metric_cards_html(metrics):
     
     return metrics_html
 
-def generate_html_report_with_apple_theme(outline, sections, visualizations):
-    """使用Apple风格主题生成HTML报告"""
+def generate_html_report_with_apple_theme(outline, sections, visualizations, user_query=""):
+    """使用类Apple设计风格生成HTML报告"""
     print("生成HTML报告...")
-    title = outline['title']
+    
+    # 获取主题样式
+    apple_theme = get_apple_theme()
+    
+    # 准备标题和副标题
+    title = outline.get('title', '自动生成的报告')
     subtitle = outline.get('subtitle', '')
     
-    # 应用Apple主题
-    theme_style = get_apple_theme()
+    # 提取所有内容，用于生成关键指标
+    all_content = ""
+    for section in sections:
+        for subsection in section.get('subsections', []):
+            all_content += subsection.get('content', '') + "\n\n"
     
-    # 构建导航菜单
+    # 提取关键指标
+    metrics = extract_key_metrics(all_content, user_query)
+    metrics_html = create_metric_cards_html(metrics)
+    
+    # 构建导航目录
     nav_items = []
     for i, section in enumerate(sections):
         section_id = f"section-{i+1}"
         nav_item = f'<li><a href="#{section_id}" class="nav-section-link">{section["title"]}</a><ul class="subsection-nav">'
+        
         for j, subsection in enumerate(section['subsections']):
             subsection_id = f"subsection-{i+1}-{j+1}"
-            nav_item += f'<li><a href="#{subsection_id}" class="nav-subsection-link">{subsection["title"]}</a></li>'
+            nav_item += f'<li><a href="#{subsection_id}">{subsection["title"]}</a></li>'
+        
         nav_item += '</ul></li>'
         nav_items.append(nav_item)
     
     nav_html = '\n'.join(nav_items)
-    
-    # 收集所有子章节内容，用于提取全局指标
-    all_content = ""
-    for section in sections:
-        for subsection in section['subsections']:
-            all_content += subsection["content"] + "\n\n"
-            
-    # 提取全局关键指标
-    global_metrics = extract_key_metrics(all_content)
-    global_metrics_html = create_metric_cards_html(global_metrics)
     
     # 构建内容部分
     content_sections = []
@@ -1850,15 +1797,15 @@ def generate_html_report_with_apple_theme(outline, sections, visualizations):
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <style>
         :root {{
-            --primary-color: {theme_style['primary_color']};
-            --secondary-color: {theme_style['secondary_color']};
-            --accent-color: {theme_style['accent_color']};
-            --text-color: {theme_style['text_color']};
-            --text-secondary: {theme_style['text_secondary']};
-            --background-color: {theme_style['background_color']};
-            --nav-bg: {theme_style['nav_bg']};
-            --nav-text: {theme_style['nav_text']};
-            --chart-bg: {theme_style['chart_bg']};
+            --primary-color: {apple_theme['primary_color']};
+            --secondary-color: {apple_theme['secondary_color']};
+            --accent-color: {apple_theme['accent_color']};
+            --text-color: {apple_theme['text_color']};
+            --text-secondary: {apple_theme['text_secondary']};
+            --background-color: {apple_theme['background_color']};
+            --nav-bg: {apple_theme['nav_bg']};
+            --nav-text: {apple_theme['nav_text']};
+            --chart-bg: {apple_theme['chart_bg']};
             --nav-width: 280px;
             --transition-speed: 0.5s;
         }}
@@ -2495,7 +2442,7 @@ def generate_html_report_with_apple_theme(outline, sections, visualizations):
         
         <!-- 全局指标卡片 -->
         <div class="report-metrics">
-            {global_metrics_html}
+            {metrics_html}
         </div>
         
         {content_html}
@@ -2618,7 +2565,11 @@ def save_html_report(html_content, report_name="report"):
     """保存HTML报告到工作区"""
     workspace_path = get_workspace_path()
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{report_name}_{timestamp}.html"
+    
+    # 清理文件名，移除Windows不允许的字符 (: * ? " < > | \ / )
+    safe_report_name = re.sub(r'[\\/:*?"<>|]', '_', report_name)
+    
+    filename = f"{safe_report_name}_{timestamp}.html"
     filepath = os.path.join(workspace_path, filename)
     
     print(f"正在保存HTML报告到: {filepath}")
@@ -2631,13 +2582,13 @@ def save_html_report(html_content, report_name="report"):
         print(f"保存HTML报告时出错: {str(e)}")
         return None
 
-def create_html_report(title=None, include_charts=True, chart_types=['all'], output_filename=None):
+def create_html_report(title=None, include_charts=True, chart_types=['all'], output_filename=None, user_query=""):
     """创建HTML报告的主函数"""
     try:
         print("=" * 50)
         print("开始创建HTML报告")
         print("=" * 50)
-        
+        print(user_query)
         # 步骤1: 读取工作区文件
         print("\n[步骤1/6] 读取工作区文件")
         text_files = read_text_files_from_workspace()
@@ -2649,11 +2600,11 @@ def create_html_report(title=None, include_charts=True, chart_types=['all'], out
         
         # 步骤2: 生成报告大纲
         print("\n[步骤2/6] 生成报告大纲")
-        outline = generate_outline(text_files)
-        if not outline:
+        outline = generate_outline(text_files, user_query)
+        if outline is None:
             return {
                 "status": "error",
-                "message": "生成报告大纲时出错"
+                "message": "生成报告大纲时出错，无法解析LLM返回的内容"
             }
         
         # 如果提供了标题，覆盖大纲中的标题
@@ -2665,7 +2616,7 @@ def create_html_report(title=None, include_charts=True, chart_types=['all'], out
         
         # 步骤3: 根据大纲重新组织内容
         print("\n[步骤3/6] 根据大纲重新组织内容")
-        sections = reorganize_content(text_files, outline)
+        sections = reorganize_content(text_files, outline, user_query)
         if not sections:
             return {
                 "status": "error",
@@ -2707,7 +2658,7 @@ def create_html_report(title=None, include_charts=True, chart_types=['all'], out
                         print(f"\n处理小节 ({processed_count}/{total_subsections}): {subsection['title']}")
                     
                     # 分析内容是否适合生成图表
-                    viz_info = analyze_content_for_visualization(subsection['content'])
+                    viz_info = analyze_content_for_visualization(subsection['content'], user_query)
                     
                     if not viz_info.get('suitable_for_visualization', False):
                         return None
@@ -2796,17 +2747,24 @@ def create_html_report(title=None, include_charts=True, chart_types=['all'], out
         
         # 步骤5: 使用商务风格主题生成HTML报告
         print(f"\n[步骤5/6] 生成HTML报告")
-        html_content = generate_html_report_with_apple_theme(outline, sections, visualizations)
+        html_content = generate_html_report_with_apple_theme(outline, sections, visualizations, user_query)
         
         # 步骤6: 保存HTML报告
         print(f"\n[步骤6/6] 保存HTML报告")
-        filename_prefix = output_filename if output_filename else outline['title'].replace(' ', '_')
+        if output_filename:
+            filename_prefix = output_filename
+        else:
+            # 使用标题但确保不含无效字符
+            filename_prefix = outline['title'].replace(' ', '_')
+            
         report_path = save_html_report(html_content, report_name=filename_prefix)
         
         if report_path:
             # 将图表模板也保存到工作区
             if chart_templates:
-                templates_path = os.path.join(get_workspace_path(), f"{filename_prefix}_chart_templates.py")
+                # 确保模板文件名也不含无效字符
+                safe_filename_prefix = re.sub(r'[\\/:*?"<>|]', '_', filename_prefix)
+                templates_path = os.path.join(get_workspace_path(), f"{safe_filename_prefix}_chart_templates.py")
                 print(f"保存图表模板到: {templates_path}")
                 with open(templates_path, 'w', encoding='utf-8') as f:
                     f.write("# 图表生成模板\n\n")
@@ -2853,10 +2811,15 @@ def main(params=None):
         print("HTML可视化报告生成工具")
         print("=" * 60)
         
+        # 从参数中获取用户查询（如果有的话）
+        user_query = ""
+        if params and isinstance(params, dict) and 'user_query' in params:
+            user_query = params['user_query']
+        
         print("\n正在与模型交互获取报告参数...")
         
         # 与大模型交互获取参数
-        user_params = ask_model_for_parameters()
+        user_params = ask_model_for_parameters(user_query)
         
         print("\n获取到的参数:")
         if user_params.get('report_title'):
@@ -2875,7 +2838,8 @@ def main(params=None):
             title=user_params.get('report_title'),
             include_charts=user_params.get('include_charts', True),
             chart_types=user_params.get('chart_types', ['all']),
-            output_filename=user_params.get('output_filename')
+            output_filename=user_params.get('output_filename'),
+            user_query=user_query
         )
         
         if result["status"] == "success":

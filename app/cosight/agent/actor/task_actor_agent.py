@@ -45,6 +45,7 @@ class TaskActorAgent(BaseAgent):
                  tool_llm: ChatLLM, plan_id,
                  functions: Dict = None):
         self.plan = TaskManager.get_plan(plan_id)
+        self.question = None  # Store the question for later use
         act_toolkit = ActToolkit(self.plan)
         terminate_toolkit = TerminateToolkit()
         file_toolkit = FileToolkit()
@@ -94,7 +95,13 @@ class TaskActorAgent(BaseAgent):
                          "ask_question_about_video": video_toolkit.ask_question_about_video,
                          "fetch_website_content": fetch_website_content,
                          "extract_document_content": doc_toolkit.extract_document_content,
-                         "create_html_report": create_html_report,
+                         "create_html_report": lambda title=None, include_charts=True, chart_types=['all'], output_filename=None: create_html_report(
+                             title=title, 
+                             include_charts=include_charts, 
+                             chart_types=chart_types, 
+                             output_filename=output_filename,
+                             user_query=self.question
+                         ),
                          }
         if functions:
             all_functions = functions.update(functions)
@@ -103,6 +110,7 @@ class TaskActorAgent(BaseAgent):
 
     @time_record
     def act(self, question, step_index):
+        self.question = question  # Store the question for use in tools
         self.plan.mark_step(step_index, step_status="in_progress")
         plan_report_event_manager.publish("plan_process", self.plan)
         self.history.append(
