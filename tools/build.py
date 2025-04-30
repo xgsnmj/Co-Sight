@@ -75,7 +75,7 @@ def main():
     """主打包函数"""
     start_time = time.time()
     
-    print("开始打包NAE-Manus...")
+    print("开始打包Cosight...")
 
     # 确保dist目录是空的
     dist_dir = Path("dist")
@@ -86,32 +86,31 @@ def main():
     # 调整当前目录的获取方式
     current_dir = os.path.dirname(os.path.abspath(__file__))  # tools目录
     project_root = os.path.dirname(current_dir)  # 项目根目录
-    manus_server_dir = os.path.join(project_root, 'cosight_server')  # manus_server目录
+    cosight_server_dir = os.path.join(project_root, 'cosight_server')  # cosight_server目录
     
     separator = ";" if sys.platform.startswith("win") else ":"
     
     # 更新数据文件路径
     data_files = [
-        f"{os.path.join(manus_server_dir, 'web')}{separator}web",
-        f"{os.path.join(manus_server_dir, 'deep_research/services/i18n.json')}{separator}cosight_server/deep_research/services",
+        f"{os.path.join(cosight_server_dir, 'web')}{separator}web",
+        f"{os.path.join(cosight_server_dir, 'deep_research/services/i18n.json')}{separator}cosight_server/deep_research/services",
         f"{os.path.join(project_root, 'app/cosight/tool/deep_search/common/i18n.json')}{separator}app/cosight/tool/deep_search/common",
         f"{os.path.join(project_root, 'config')}{separator}config"
     ]
     
     # 创建spec文件
-    spec_file = os.path.join(current_dir, 'NAE-Manus.spec')
+    spec_file = os.path.join(current_dir, 'Cosight.spec')
     with open(spec_file, 'w', encoding='utf-8') as f:
         # 更新图标和主程序路径
-        icon_path = os.path.join(manus_server_dir, "web/favicon.ico").replace("\\", "\\\\")
-        main_py_path = os.path.join(manus_server_dir, 'deep_research/main.py').replace('\\', '\\\\')
+        icon_path = os.path.join(cosight_server_dir, "web/favicon.ico").replace("\\", "\\\\")
+        main_py_path = os.path.join(cosight_server_dir, 'deep_research/main.py').replace('\\', '\\\\')
         
         # 构建数据文件列表
         datas_list = []
         for data_file in data_files:
             src, dest = data_file.split(separator)
             if os.path.exists(src):
-                src_escaped = src.replace('\\', '\\\\')
-                datas_list.append(f"(r'{src_escaped}', r'{dest}')")
+                datas_list.append(f"(r'{src.replace('\\', '\\\\')}', r'{dest}')")
         
         datas_str = ",\n        ".join(datas_list)
         
@@ -195,7 +194,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='NAE-Manus',
+    name='Cosight',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -217,7 +216,7 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='NAE-Manus',
+    name='Cosight',
 )
 """)
 
@@ -225,7 +224,7 @@ coll = COLLECT(
     run_command(f"pyinstaller --clean {spec_file}")
     
     # 更新输出目录路径
-    output_dir = os.path.join('dist', 'NAE-Manus')
+    output_dir = os.path.join('dist', 'Cosight')
     
     # 检查并手动复制必要的数据文件
     print("检查并手动复制必要的数据文件...")
@@ -323,7 +322,7 @@ coll = COLLECT(
     elapsed_time = time.time() - start_time
     elapsed_time_formatted = str(timedelta(seconds=int(elapsed_time)))
     
-    print(f"打包完成。可执行文件位于dist/NAE-Manus目录中。")
+    print(f"打包完成。可执行文件位于dist/Cosight目录中。")
     print(f"总执行时间: {elapsed_time_formatted} (小时:分钟:秒)")
 
     # 验证打包结果

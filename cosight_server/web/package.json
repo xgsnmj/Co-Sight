@@ -1,0 +1,17 @@
+{
+  "version": "7.9.2",
+  "description": "The icon font for Jigsaw.",
+  "homepage": "https://jigsaw-zte.gitee.io/latest/assets/icon-font/iconfont.html",
+  "keywords": [
+    "jigsaw",
+    "rdk",
+    "icon",
+    "font"
+  ],
+  "license": "MIT",
+  "main": "./iconfont.css",
+  "name": "@rdkmaster/icon-font",
+  "devDependencies": {
+    "shelljs": "~0.8.4"
+  }
+}

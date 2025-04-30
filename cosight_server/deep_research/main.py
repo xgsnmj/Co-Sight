@@ -223,7 +223,7 @@ async def global_exception_handler(request: Request, call_next):
         return JSONResponse(status_code=500, content={"message": "An unexpected error occurred.", "details": str(e)})
 
 if __name__ == '__main__':
-    print("\n【提示】请在浏览器访问: http://localhost:7788/manus/\n")
+    print("\n【提示】请在浏览器访问: http://localhost:7788/cosight/\n")
     import argparse
     import uvicorn
     

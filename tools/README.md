@@ -1,6 +1,6 @@
-# NAE-Manus 构建指南
+# Cosight 构建指南
 
-本指南将帮助你完成 NAE-Manus 的构建过程，包括前端构建和可执行文件打包。
+本指南将帮助你完成 Cosight 的构建过程，包括前端构建和可执行文件打包。
 
 ## 环境准备
 
@@ -41,9 +41,9 @@ python tools/build_web.py
 ```
 
 脚本会：
-- 在 manus_ui 目录下执行 `npm run build`
-- 清空 manus_server/web 目录
-- 将构建后的文件复制到 manus_server/web 目录
+- 在 cosight_ui 目录下执行 `npm run build`
+- 清空 cosight_server/web 目录
+- 将构建后的文件复制到 cosight_server/web 目录
 
 ### 2. 打包可执行文件 (build.py)
 这个脚本会将整个应用打包成一个可执行文件。

@@ -13,7 +13,7 @@ const routes: Routes = [
         canActivate: [UnLoggedInGuard],
     },
     {
-        path: 'manus',
+        path: 'cosight',
         component: ManusChatbot,
         canActivate: [UnLoggedInGuard],
     },

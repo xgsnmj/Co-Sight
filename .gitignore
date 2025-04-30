@@ -17,4 +17,4 @@ node_modules
 logs/
 __pycache__
 **/work_space_*
-cosight_server/web
+.env

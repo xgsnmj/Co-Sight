@@ -702,16 +702,16 @@ def create_html_report_skill():
     return {
         'skill_name': 'create_html_report',
         'skill_type': "function",
-        'display_name_zh': 'HTML报告生成（不是create_report）',
-        'display_name_en': 'Generate HTML Report (not create_report)',
-        'description_zh': '注意：函数名为create_html_report，不是create_report。根据工作区文本文件生成结构化的商务风格HTML报告，包含自动生成的图表和导航栏。此功能可以自动分析工作区中的文本文件并创建可视化报告。',
-        'description_en': 'NOTE: Function name is create_html_report, not create_report. Generate structured business-style HTML reports from workspace text files, with auto-generated charts and navigation. This function automatically analyzes text files in the workspace and creates a visualization report.',
+        'display_name_zh': 'HTML报告生成（只在生成最终报告时调用此函数，过程中的报告保存不要调用这个函数）',
+        'display_name_en': 'Generate HTML Report (This function is only called when generating the final report. Do not call this function when saving the report in the process.)',
+        'description_zh': '根据工作区文本文件生成结构化的商务风格HTML报告，包含自动生成的图表和导航栏。此功能可以自动分析工作区中的文本文件并创建可视化报告。（只在生成最终报告时调用此函数，过程中的报告保存不要调用这个函数）',
+        'description_en': 'Generate structured business-style HTML reports from workspace text files, with auto-generated charts and navigation. This function automatically analyzes text files in the workspace and creates a visualization report.This function is only called when generating the final report. Do not call this function when saving the report in the process.',
         'semantic_apis': ["api_report_generation", "api_visualization"],
         'function': SkillFunction(
             id='8e57b2a0-c6e8-4d3b-9f1d-b02a4c6f8235',
-            name='app.cosight.html_visualization_toolkit.main',
-            description_zh='基于工作区中的文本文件，自动生成包含可视化图表的商务风格HTML报告。注意：此函数名为create_html_report，在调用时不要混淆。',
-            description_en='Automatically generate business-style HTML reports with visualizations based on text files in the workspace. NOTE: This function is named create_html_report, do not confuse when calling.',
+            name='app.cosight.tool.html_visualization_toolkit.main',
+            description_zh='基于工作区中的文本文件，自动生成包含可视化图表的商务风格HTML报告。（只在生成最终报告时调用此函数，过程中的报告保存不要调用这个函数）',
+            description_en='Automatically generate business-style HTML reports with visualizations based on text files in the workspace. This function is only called when generating the final report. Do not call this function when saving the report in the process.',
             parameters={
                 "type": "object",
                 "properties": {},
