@@ -1,152 +1,54 @@
-## 安装指南
+
+## 🔍样例演示
+
+| 场景       | 示例链接                                                                          | 效果预览                                        |
+| -------- | ----------------------------------------------------------------------------- | ------------------------------------------- |
+| **行业研究** | [中兴通讯分析报告](https://www.youtube.com/watch?v=SNd8kYPxr3s)                       | ![](assets/Pasted image 20250501015026.png) |
+| **个人生活** | [2025年五一上海旅游攻略](https://www.youtube.com/watch?v=IkAGq0e1Lio&feature=youtu.be) | ![](assets/Pasted image 20250501015117.png) |
+| **新闻热点** | [特朗普关税政策全球影响分析](https://www.youtube.com/watch?v=19-BmlHuG_E)                  | ![](assets/Pasted image 20250501015026.png) |
+| **...**  |                                                                               |                                             |
 
 
-### 方式一：使用 conda
 
-1. 创建新的 conda 环境：
+## 🛠安装指南
 
-```bash
-conda create -n Co-Sight python=3.11
-conda activate Co-Sight
-```
+1. **准备环境**：python版本>=3.11
 
-2. 克隆仓库：
-
-```bash
-git clone 
-cd 
-```
-
-3. 安装依赖：
-
-```bash
+2. **安装依赖**：
+```shell
 pip install -r requirements.txt
 ```
 
-## 配置说明
-
-Co-Sight 需要配置使用的 LLM API，请按以下步骤设置：
-
-1. 打开 `.env`文件，并编辑以下内容，添加 API 密钥和自定义设置：
-
-```plaintext
-# 全局 LLM 配置
-API_KEY=your-key-here
-API_BASE_URL=your-base-url-here
-MODEL_NAME=your-model-here
-MAX_TOKENS=4096
-TEMPERATURE=0.0
-PROXY=
-
-# 可选特定 LLM 模型配置
-# Co-Sight可分层配置模型：规划，执行，工具以及多模态
-# 在对应的模型配置项下面，配置模型参数（API_KEY，API_BASE_URL，MODEL_NAME都配置方可生效）
-
-# # ===== PLAN MODEL =====
-# TOOL_API_KEY=
-# TOOL_API_BASE_URL=
-# TOOL_MODEL_NAME=
-# TOOL_MAX_TOKENS=
-# TOOL_TEMPERATURE=
-# TOOL_PROXY=
-
-# # ===== ACT MODEL =====
-
-# # ===== TOOL MODEL =====
-
-# # ===== VISION MODEL =====
 
 
-# 搜索工具配置
-# ===== 工具API =====
+## ⚙️配置说明
 
-# tavily搜索引擎
-TAVILY_API_KEY=tvly-your-key-here
+1. **拷贝模板`.env_template`并生成 `.env`**（该文件已被加入 `.gitignore`，可安全存储私密信息）：
+2. **编辑** `.env` **配置核心参数**：
+	1. 大模型配置：配置相对应的大模型地址，模型名称，API-KEY等，可进一步（可选）对规划、执行、工具、多模态模型做配置；
+	2. 搜索引擎配置（可选）：配置相关搜索引擎API-KEY；
 
-# google搜索引擎
-GOOGLE_API_KEY=your-key-here
-SEARCH_ENGINE_ID=your-id-here
-```
-## 模型API-KEY获取  
-大模型（到对应网站购买api）
-```
-deepseek:   https://api-docs.deepseek.com/zh-cn/
-qwen:       https://bailian.console.aliyun.com/?tab=api#/api
-...
-```
-工具大模型
-```
-Tavily搜索引擎的API_KEY（可去官网申请，每月每账号1000次免费访问）
-https://app.tavily.com/home
 
-google_search搜索引擎的API_KEY（可去官网申请，每天可免费访问100次）
-进入  https://developers.google.com/custom-search/v1/overview?hl=zh-cn
-点击 overview 中的 Get a Key，需要登录谷歌帐号，以及注册谷歌云帐号并且创建一个 project，得到一个 Key(GOOGLE_API_KEY)。
-进入  https://programmablesearchengine.google.com/controlpanel/all   获取SEARCH_ENGINE_ID
-```
 
-## 快速启动
+## ▶️ 快速启动
 
-### 直接运行 Co-Sight：
-```bash
-运行CoSight.py
-if __name__ == '__main__':
-    # 配置工作区
-    os.makedirs(WORKSPACE_PATH, exist_ok=True)
-    os.environ['WORKSPACE_PATH'] = WORKSPACE_PATH
+1. **启动后台服务**：cosight_server/deep_research/main.py
+![](assets/Pasted image 20250430225822.png)
+2. **打开浏览器，访问：**
+`http://localhost:7788/cosight/`
+3. **在输入框中输入你的第一个任务，体验智能研究引擎的强大能力！**
+![](assets/Pasted image 20250501020936.png)
 
-    # 配置CoSight
-    cosight = CoSight(llm_for_plan, llm_for_act, llm_for_tool, llm_for_vision)
 
-    # 运行CoSight
-    result = cosight.execute("帮我写一篇中兴通讯的分析报告")
-    print(f"final result is {result}")
-```
 
-### 前后端运行：  
+## 🤝 贡献指南
 
-#### 前端配置：
+非常欢迎 PR、Issue！如果你有任何想法或建议：
 
-linux：
-```bash
-cd cosight_ui/tools
-sh npm-install.sh
-```
+- 提交 Issue：描述你的想法与问题。
+  
+- 发起 PR：完善文档、添加示例或优化功能。
+  
 
-windows：
-```bash
-cd cosight_ui/tools
-运行 npm-install.bat
-```
+一起让 Co-Sight Agent 更加强大。
 
-前端启动：
-```bash
-cd cosight_ui
-执行 npm start
-
-浏览器访问: https://localhost:4200/
-```
-
-#### 后端启动
-```bash
-cd cosight_server/deep_research
-
-运行 main.py
-
-if __name__ == '__main__':
-    import argparse
-    import uvicorn
-    
-    # 创建命令行参数解析器
-    parser = argparse.ArgumentParser(description=i18n.t('ai_search_plugin_description'))
-    parser.add_argument('-p', '--port', type=int, help=i18n.t('ai_search_port_help'), default=None)
-    args = parser.parse_args()
-    
-    logger.info('*****************')
-    logger.info('plugin server staring...')
-    args.port = custom_config.get("search_port")
-
-    uvicorn.run(app=app, host="0.0.0.0", port=int(args.port))
-```
-
-生成文件可在`cosight_server/work_space`文件夹中查看
