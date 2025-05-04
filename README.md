@@ -14,7 +14,9 @@
 | **新闻热点** | [特朗普关税政策全球影响分析](https://www.youtube.com/watch?v=19-BmlHuG_E)                  | ![](assets/Pasted_image_20250501015617.png)     |
 | **...**  |                                                                               |                                                 |
 
+**欢迎大家在 Lab 中贡献更多示例，丰富我们的案例库！**  
 
+GitHub 地址：[https://github.com/Co-Sight-Series/Co-Sight-Lab](https://github.com/Co-Sight-Series/Co-Sight-Lab)
 
 ## 🛠安装指南
 
