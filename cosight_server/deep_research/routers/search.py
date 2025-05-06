@@ -229,7 +229,6 @@ async def search(request: Request, params: Any = Body(None)):
         try:
             async for response_data in generator_func():
                 response_json = {
-                    "model": "qwen2-7b-int4",
                     "contentType": "lui-message-manus-step",
                     "sessionInfo": params.get("sessionInfo", {}),
                     "code": 0,
@@ -246,7 +245,6 @@ async def search(request: Request, params: Any = Body(None)):
             error_msg = "生成回复时发生错误。"
             logger.exception(error_msg)
             error_response = json.dumps({
-                "model": "qwen2-7b-int4",
                 "contentType": "lui-message-manus-step",
                 "content": {"intro": error_msg, "steps": []},
                 "sessionInfo": params.get("sessionInfo", {}),
