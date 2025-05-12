@@ -26,7 +26,7 @@ def get_model_config() -> dict[str, Optional[str | int | float]]:
     """获取API配置"""
     max_tokens = os.environ.get("MAX_TOKENS")
     temperature = os.environ.get("TEMPERATURE")
-
+    os.environ['OPENAI_API_KEY'] = os.environ.get("API_KEY")
     return {
         "api_key": os.environ.get("API_KEY"),
         "base_url": os.environ.get("API_BASE_URL"),

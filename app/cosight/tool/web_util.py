@@ -47,7 +47,8 @@ class WebToolkit:
                 return loop.run_until_complete(task)
             except RuntimeError:
                 # 如果没有事件循环，创建新的
-                return asyncio.run(self.inner_browser_use(task_prompt))
+                loop = asyncio.new_event_loop()
+                return loop.run_until_complete(self.inner_browser_use(task_prompt))
         except Exception as e:
             print(f"browser_use error {e}")
             # 确保返回的是字符串而不是协程
