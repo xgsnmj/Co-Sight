@@ -54,7 +54,7 @@ pip install -r requirements.txt
 	1. Large model configuration: Configure the corresponding large model address, model name, API-KEY, etc., and further (optionally) configure the planning, execution, tools, and multi-modal model;
 	2. Search engine configuration (optional): configure the API-KEY of the relevant search engine;
 		1. Google Search how to apply：https://developers.google.com/custom-search/v1/overview?hl=zh-cn#api_key
-		   ![](assets/Pasted_image_20250502115226.png)	
+		   ![](assets/Pasted_image_20250916105315.png)	
 		2. Tavily Search how to apply：https://app.tavily.com/home
 		   ![](assets/Pasted_image_20250502115315.png)
 
