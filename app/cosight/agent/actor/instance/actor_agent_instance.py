@@ -50,12 +50,21 @@ def create_actor_template(template_name):
         'default_replay_zh': '任务执行专家',
         'default_replay_en': 'Task Execution Expert',
         "icon": "",
-        'skills': [execute_code_skill(), search_baidu_skill(), mark_step_skill(), browser_use_skill(),
-                   file_saver_skill(), file_read_skill(), file_str_replace_skill(), file_find_in_content_skill(),
-                   ask_question_about_image_skill(), extract_document_content_skill(),
+        'skills': [execute_code_skill(),
+                   search_baidu_skill(),
+                   mark_step_skill(),
+                   browser_use_skill(),
+                   file_saver_skill(),
+                   file_read_skill(),
+                   file_str_replace_skill(),
+                   file_find_in_content_skill(),
+                   ask_question_about_image_skill(),
+                   extract_document_content_skill(),
                    create_html_report_skill(),
-                   fetch_website_content_skill(), search_duckgo_skill(), search_wiki_skill(), tavily_search_skill(),
-                   search_google_skill(), search_image_skill(), audio_recognition_skill(),
+                   fetch_website_content_skill(),
+                   search_duckgo_skill(),
+                   search_wiki_skill(),
+                   audio_recognition_skill(),
                    ask_question_about_video_skill()],
         # , terminate_skill(), browser_use_skill()
         "organizations": [],
@@ -64,4 +73,13 @@ def create_actor_template(template_name):
         'business_type': {}
     }
     template_content['skills'].extend(register_mcp_tools())
+    load_search_skill(template_content)
     return AgentTemplate(**template_content)
+
+
+def load_search_skill(template_content):
+    import os
+    if os.environ.get("GOOGLE_API_KEY", "") and os.environ.get("SEARCH_ENGINE_ID", ""):
+        template_content['skills'].extend([search_google_skill()])
+    if os.environ.get("TAVILY_API_KEY", ""):
+        template_content['skills'].extend([tavily_search_skill(), search_image_skill()])
