@@ -90,6 +90,16 @@ docker restart ac39023b3b3fdc3245ec1cc0293afb6b0a5efd4675ee79535ed6663c3e2a2558
 3. **open your browser and visit**
 `http://localhost:7788/cosight/`
 
+## 📣 Resource Requirements
+- **CPU**: 4 cores  
+- **Memory**: 4GB  
+- **Disk**: 1GB  
+  - Dependencies: 400MB  
+  - Project files: 50MB  
+  - Minimum required disk space: 500MB  
+  - Recommended disk space: 1GB
+
+This configuration ensures basic system operation and successful dependency installation for stable performance.
 
 ## 🤝 Contribution Guidelines
 

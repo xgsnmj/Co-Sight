@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from typing import Optional
 
 # 加载.env文件到环境变量
-load_dotenv()
+load_dotenv(override=True)
 
 
 # ========== 大模型配置 ==========
