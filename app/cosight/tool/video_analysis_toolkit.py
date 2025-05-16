@@ -22,6 +22,7 @@ import base64
 import numpy as np
 import soundfile as sf
 import asyncio
+from cosight_server.sdk.common.logger_util import logger
 
 
 class VideoTool:
@@ -88,7 +89,6 @@ class VideoTool:
                 if hasattr(delta, "audio") and delta.audio:
                     try:
                         if delta.audio['transcript']:
-                            # print(delta.audio['transcript'], end="", flush=True)
                             full_response += delta.audio['transcript']
                     except Exception as ex:
                         pass
@@ -102,5 +102,5 @@ class VideoTool:
         return full_response
 
     def ask_question_about_video(self, video_path: str, question: str, ):
-        print(f"Using Tool: {self.name}")
+        logger.info(f"Using Tool: {self.name}, video_path: {video_path}, question: {question}")
         return asyncio.run(self.video_analy(video_path, question))

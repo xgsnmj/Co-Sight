@@ -18,10 +18,12 @@ from openai import OpenAI
 
 from app.cosight.task.time_record_util import time_record
 
+from cosight_server.sdk.common.logger_util import logger
+
 
 class ChatLLM:
     def __init__(self, base_url: str, api_key: str, model: str, client: OpenAI, max_tokens: int = 4096,
-                 temperature: float = 0.0, stream: bool = False,  tools: List[Any] = None):
+                 temperature: float = 0.0, stream: bool = False, tools: List[Any] = None):
         self.tools = tools or []
         self.client = client
         self.base_url = base_url
@@ -61,7 +63,7 @@ class ChatLLM:
             temperature=self.temperature,
             max_tokens=self.max_tokens
         )
-        # print(f"response is {response}")
+        logger.info(f"LLM with tools chat completions response is {response}")
         # 去除think标签
         content = response.choices[0].message.content
         if content is not None and '</think>' in content:
@@ -79,7 +81,7 @@ class ChatLLM:
             temperature=self.temperature,
             max_tokens=self.max_tokens
         )
-        # print(f"response is {response}")
+        logger.info(f"LLM chat completions response is {response}")
         # 去除think标签
         content = response.choices[0].message.content
         if content is not None and '</think>' in content:

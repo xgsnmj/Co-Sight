@@ -17,6 +17,7 @@ from openai import OpenAI
 
 from app.cosight.llm.chat_llm import ChatLLM
 from config.config import *
+from cosight_server.sdk.common.logger_util import logger
 
 
 def set_model(model_config: dict[str, Optional[str | int | float]]):
@@ -54,17 +55,17 @@ def set_model(model_config: dict[str, Optional[str | int | float]]):
 
 
 plan_model_config = get_plan_model_config()
-print(f"plan_model_config:{plan_model_config}\n")
+logger.info(f"plan_model_config:{plan_model_config}\n")
 llm_for_plan = set_model(plan_model_config)
 
 act_model_config = get_act_model_config()
-print(f"act_model_config:{act_model_config}\n")
+logger.info(f"act_model_config:{act_model_config}\n")
 llm_for_act = set_model(act_model_config)
 
 tool_model_config = get_tool_model_config()
-print(f"tool_model_config:{tool_model_config}\n")
+logger.info(f"tool_model_config:{tool_model_config}\n")
 llm_for_tool = set_model(tool_model_config)
 
 vision_model_config = get_vision_model_config()
-print(f"vision_model_config:{vision_model_config}\n")
+logger.info(f"vision_model_config:{vision_model_config}\n")
 llm_for_vision = set_model(vision_model_config)

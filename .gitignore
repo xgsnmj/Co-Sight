@@ -15,6 +15,7 @@ node_modules
 .vscode
 **/src-tmp
 logs/
+plans/
 __pycache__
 **/work_space_*
 .env

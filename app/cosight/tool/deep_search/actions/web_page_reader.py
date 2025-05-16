@@ -20,9 +20,8 @@ from bs4 import BeautifulSoup
 from cachetools import cached, TTLCache
 from markdownify import markdownify as md
 
-from cosight_server.sdk.common.logger_util import get_logger
+from cosight_server.sdk.common.logger_util import logger
 
-logger = get_logger("ai-search")
 
 class ContentFetcher:
     """基础网页内容获取器"""

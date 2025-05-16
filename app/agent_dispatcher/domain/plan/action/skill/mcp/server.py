@@ -26,6 +26,7 @@ from app.agent_dispatcher.infrastructure.entity.exception.error_code_consts impo
 
 from app.agent_dispatcher.infrastructure.entity.exception.ZaeFrameworkException import \
     NaeFrameworkException
+from cosight_server.sdk.common.logger_util import logger
 
 
 class MCPServer(abc.ABC):
@@ -153,7 +154,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                 await self.exit_stack.aclose()
                 self.session = None
             except Exception as e:
-                print(f"Error cleaning up server: {e}")
+                logger.error(f"Error cleaning up server: {e}", exc_info=True)
 
 
 class MCPServerStdio(_MCPServerWithClientSession):

@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from cosight_server.sdk.common.logger_util import logger
 class TerminateToolkit:
     r"""A class representing a toolkit for terminating interactions when the request is met OR if the assistant cannot proceed further with the task."""
 
@@ -29,5 +30,5 @@ class TerminateToolkit:
         Returns:
             str: The termination message.
         """
-        print(f"Terminating interaction with status: {status}, with reason: {reason}")
+        logger.info(f"Terminating interaction with status: {status}, with reason: {reason}")
         return f"The interaction has been completed with status: {status}, with reason: {reason}"

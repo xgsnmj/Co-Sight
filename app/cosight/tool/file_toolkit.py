@@ -17,6 +17,7 @@ import os
 import traceback
 import re
 from pathlib import Path
+from cosight_server.sdk.common.logger_util import logger
 
 default_encoding: str = "utf-8"
 DEFAULT_FORMAT: str = ".md"  # Default format for files without extension
@@ -42,12 +43,12 @@ class FileToolkit:
             # Explicit validation for content parameter
             if content is None or (isinstance(content, str) and content.strip() == ''):
                 error_msg = "ERROR: Missing required 'content' parameter. You must provide the actual text content to save to the file."
-                print(error_msg)
+                logger.error(error_msg)
                 return error_msg
-                
-            print(f"Saving content to file: {file_path}")
-            print(f"Content length: {len(str(content)) if content else 0} characters")
-            
+
+            logger.info(f"Saving content to file: {file_path}")
+            logger.info(f"Content length: {len(str(content)) if content else 0} characters")
+
             # Use the input path if it exists, otherwise use workspace path
             if os.path.exists(file_path):
                 absolute_path = file_path
@@ -62,7 +63,7 @@ class FileToolkit:
             directory = os.path.dirname(absolute_path)
             if directory and not os.path.exists(directory):
                 os.makedirs(directory)
-            print(f"saved file to absolute_path {absolute_path}")
+            logger.info(f"saved file to absolute_path {absolute_path}")
 
             # Add 'b' to mode if binary
             file_mode = mode + 'b' if binary else mode
@@ -72,13 +73,14 @@ class FileToolkit:
             return f"Content successfully saved to {absolute_path}"
         except TypeError as e:
             error_msg = f"ERROR: Invalid content parameter. Make sure you provide the 'content' parameter with the text to save: {str(e)}"
-            print(error_msg, traceback.format_exc())
+            logger.error(error_msg, exc_info=True)
             return error_msg
         except Exception as e:
-            print(f"failed to save file: {e}", traceback.format_exc())
+            logger.error(f"failed to save file: {str(e)}", exc_info=True)
             return f"Error saving file: {str(e)}"
 
-    def file_read(self, file: str, start_line: int = None, end_line: int = None, sudo: bool = False, binary: bool = False) -> str | bytes:
+    def file_read(self, file: str, start_line: int = None, end_line: int = None, sudo: bool = False,
+                  binary: bool = False) -> str | bytes:
         r"""Read file content. Supports both text and binary files.
 
         Args:
@@ -92,7 +94,7 @@ class FileToolkit:
             str | bytes: The file content or error message
         """
         try:
-            print(f"reading content to file: {file}")
+            logger.info(f"reading content to file: {file}")
             # Use the input path if it exists, otherwise use workspace path
             if os.path.exists(file):
                 absolute_path = file
@@ -176,7 +178,7 @@ class FileToolkit:
             str: Matching results or error message
         """
         try:
-            print(f"finding content in file: {file}")
+            logger.info(f"finding content in file: {file}")
             import re
 
             # Use the input path if it exists, otherwise use workspace path
@@ -208,7 +210,6 @@ class FileToolkit:
         except Exception as e:
             return f"Error searching file content: {str(e)}"
 
-
     def _write_text_file(
             self,
             file_path: Path,
@@ -226,10 +227,9 @@ class FileToolkit:
         """
         with file_path.open(file_mode, encoding=None if binary else encoding) as f:
             f.write(content)
-        print(f"Wrote text to {file_path} with {encoding} encoding")
+        logger.info(f"Wrote text to {file_path} with {encoding} encoding")
 
-
-    def _write_docx_file(self,file_path: Path, content: str) -> None:
+    def _write_docx_file(self, file_path: Path, content: str) -> None:
         r"""Write text content to a DOCX file with default formatting.
 
         Args:
@@ -255,10 +255,9 @@ class FileToolkit:
             para.style = style
 
         document.save(str(file_path))
-        print(f"Wrote DOCX to {file_path} with default formatting")
+        logger.info(f"Wrote DOCX to {file_path} with default formatting")
 
-
-    def _write_pdf_file(self,file_path: Path, content: str, **kwargs) -> None:
+    def _write_pdf_file(self, file_path: Path, content: str, **kwargs) -> None:
         r"""Write text content to a PDF file with default formatting.
 
         Args:
@@ -291,8 +290,7 @@ class FileToolkit:
                 pdf.ln(line_height)  # Add empty line
 
         pdf.output(str(file_path))
-        print(f"Wrote PDF to {file_path} with custom formatting")
-
+        logger.info(f"Wrote PDF to {file_path} with custom formatting")
 
     def _write_csv_file(
             self,
@@ -316,8 +314,7 @@ class FileToolkit:
             else:
                 writer = csv.writer(f)
                 writer.writerows(content)
-        print(f"Wrote CSV to {file_path} with {encoding} encoding")
-
+        logger.info(f"Wrote CSV to {file_path} with {encoding} encoding")
 
     def _write_json_file(
             self,
@@ -346,8 +343,7 @@ class FileToolkit:
             else:
                 # If not string, dump as JSON
                 json.dump(content, f, ensure_ascii=False)
-        print(f"Wrote JSON to {file_path} with {encoding} encoding")
-
+        logger.info(f"Wrote JSON to {file_path} with {encoding} encoding")
 
     def _write_yaml_file(
             self,
@@ -366,11 +362,10 @@ class FileToolkit:
         """
         with file_path.open(file_mode, encoding=None if binary else encoding) as f:
             f.write(content)
-        print(f"Wrote YAML to {file_path} with {encoding} encoding")
-
+        logger.info(f"Wrote YAML to {file_path} with {encoding} encoding")
 
     def _write_html_file(
-            self,file_path: Path, content: str, encoding: str = "utf-8", binary: bool = False, file_mode: str = "w"
+            self, file_path: Path, content: str, encoding: str = "utf-8", binary: bool = False, file_mode: str = "w"
     ) -> None:
         r"""Write text content to an HTML file.
 
@@ -381,11 +376,10 @@ class FileToolkit:
         """
         with file_path.open(file_mode, encoding=None if binary else encoding) as f:
             f.write(content)
-        print(f"Wrote HTML to {file_path} with {encoding} encoding")
-
+        logger.info(f"Wrote HTML to {file_path} with {encoding} encoding")
 
     def _write_markdown_file(
-            self,file_path: Path, content: str, encoding: str = "utf-8", binary: bool = False, file_mode: str = "w"
+            self, file_path: Path, content: str, encoding: str = "utf-8", binary: bool = False, file_mode: str = "w"
     ) -> None:
         r"""Write text content to a Markdown file.
 
@@ -396,10 +390,9 @@ class FileToolkit:
         """
         with file_path.open(file_mode, encoding=None if binary else encoding) as f:
             f.write(content)
-        print(f"Wrote Markdown to {file_path} with {encoding} encoding")
+        logger.info(f"Wrote Markdown to {file_path} with {encoding} encoding")
 
-
-    def _sanitize_filename(self,filename: str) -> str:
+    def _sanitize_filename(self, filename: str) -> str:
         r"""Sanitize a filename by replacing any character that is not
         alphanumeric, a dot (.), hyphen (-), or underscore (_) with an
         underscore (_).
@@ -415,9 +408,8 @@ class FileToolkit:
         safe = re.sub(r'[^\w\-.]', '_', filename)
         return safe
 
-
     def write_to_file(
-            self,content: str | bytes, file_path: str, mode: str = "a", binary: bool = False
+            self, content: str | bytes, file_path: str, mode: str = "a", binary: bool = False
     ) -> str:
         r"""Write the given content to a file.
 
@@ -432,12 +424,12 @@ class FileToolkit:
         # Explicit validation for content parameter
         if content is None or (isinstance(content, str) and content.strip() == ''):
             error_msg = "ERROR: Missing required 'content' parameter. You must provide the actual text content to save to the file."
-            print(error_msg)
+            logger.error(error_msg)
             return error_msg
-            
-        print(f"Saving content to file: {file_path}")
-        print(f"Content length: {len(str(content)) if content else 0} characters")
-        
+
+        logger.info(f"Saving content to file: {file_path}")
+        logger.info(f"Content length: {len(str(content)) if content else 0} characters")
+
         # Use the input path if it exists, otherwise use workspace path
         if os.path.exists(file_path):
             absolute_path = file_path
@@ -452,7 +444,7 @@ class FileToolkit:
         directory = os.path.dirname(absolute_path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory)
-        print(f"saved file to absolute_path {absolute_path}")
+        logger.info(f"saved file to absolute_path {absolute_path}")
 
         # Add 'b' to mode if binary
         file_mode = mode + 'b' if binary else mode
@@ -503,15 +495,15 @@ class FileToolkit:
                 )
 
             msg = f"Content successfully written to file: {absolute_path}"
-            print(msg)
+            logger.info(msg)
             return msg
         except TypeError as e:
             error_msg = f"ERROR: Invalid content parameter. Make sure you provide the 'content' parameter with the text to save: {str(e)}"
-            print(error_msg, traceback.format_exc())
+            logger.error(error_msg, exc_info=True)
             return error_msg
         except Exception as e:
             error_msg = (
-                f"Error occurred while writing to file {absolute_path}: {e}"
+                f"Error occurred while writing to file {absolute_path}: {str(e)}"
             )
-            print(error_msg)
+            logger.error(error_msg, exc_info=True)
             return error_msg

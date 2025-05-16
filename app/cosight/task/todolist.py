@@ -18,10 +18,12 @@ from typing import List, Optional, Dict, Tuple
 import os
 import platform
 from pathlib import PureWindowsPath, PurePosixPath
+from cosight_server.sdk.common.logger_util import logger
 
 # 在文件开头添加全局字典
 folder_files_map: Dict[str, List[str]] = {}
 subfolder_files_map: Dict[str, List[str]] = {}
+
 
 class Plan:
     """Represents a single plan with steps, statuses, and execution details as a DAG."""
@@ -38,7 +40,7 @@ class Plan:
         if dependencies:
             self.dependencies = dependencies
         else:
-            self.dependencies = {i: [i-1] for i in range(1, len(self.steps))} if len(self.steps) > 1 else {}
+            self.dependencies = {i: [i - 1] for i in range(1, len(self.steps))} if len(self.steps) > 1 else {}
         self.result = ""
 
     def set_plan_result(self, plan_result):
@@ -53,7 +55,7 @@ class Plan:
         返回:
             List[int]: 可立即执行的步骤索引列表（返回所有符合条件的步骤）
         """
-        print(f"get_ready_steps dependencies: {self.dependencies}")
+        logger.info(f"get_ready_steps dependencies: {self.dependencies}")
         ready_steps = []
         for step_index in range(len(self.steps)):
             # 获取该步骤的所有依赖
@@ -107,15 +109,14 @@ class Plan:
             self.step_statuses = new_statuses
             self.step_notes = new_notes
             self.step_details = new_details
-        print(f"before update dependencies: {self.dependencies}")
+        logger.info(f"before update dependencies: {self.dependencies}")
         if dependencies:
             self.dependencies.clear()
             dependencies = {int(k): v for k, v in dependencies.items()}
             self.dependencies.update(dependencies)
         else:
-            self.dependencies = {i: [i-1] for i in range(1, len(steps))} if len(steps) > 1 else {}
-        print(f"after update dependencies: {self.dependencies}")
-
+            self.dependencies = {i: [i - 1] for i in range(1, len(steps))} if len(steps) > 1 else {}
+        logger.info(f"after update dependencies: {self.dependencies}")
 
     def mark_step(self, step_index: int, step_status: Optional[str] = None, step_notes: Optional[str] = None) -> None:
         """Mark a single step with specific statuses, notes, and details.
@@ -128,7 +129,7 @@ class Plan:
         # Validate step index
         if step_index < 0 or step_index >= len(self.steps):
             raise ValueError(f"Invalid step_index: {step_index}. Valid indices range from 0 to {len(self.steps) - 1}.")
-        print(f"step_index: {step_index}, step_status is {step_status},step_notes is {step_notes}")
+        logger.info(f"step_index: {step_index}, step_status is {step_status},step_notes is {step_notes}")
         step = self.steps[step_index]
 
         # Update step status
@@ -227,7 +228,7 @@ def extract_and_replace_paths(text: str, folder_name: str) -> Tuple[str, List[Di
     quoted_file_pattern = rf'《([^《》\s]+?\.{valid_extensions})》'
 
     result_list: List[Dict[str, str]] = []
-    
+
     # 初始化该文件夹的文件列表（如果不存在）
     if folder_name not in folder_files_map:
         folder_files_map[folder_name] = []
@@ -236,7 +237,7 @@ def extract_and_replace_paths(text: str, folder_name: str) -> Tuple[str, List[Di
         full_path = match.group(1)
         filename = os.path.basename(full_path.replace("\\", "/"))  # 把反斜杠变成斜杠后再提取
         new_path = f"{folder_name}/{filename}"
-        
+
         # 如果文件名不在该文件夹的列表中，则添加
         # if filename not in folder_files_map[folder_name]:
         #     folder_files_map[folder_name].append(filename)
@@ -249,7 +250,7 @@ def extract_and_replace_paths(text: str, folder_name: str) -> Tuple[str, List[Di
     def replace_quoted_file(match):
         filename = match.group(1)
         new_path = f"{folder_name}/{filename}"
-        
+
         # 如果文件名不在该文件夹的列表中，则添加
         # if filename not in folder_files_map[folder_name]:
         #     folder_files_map[folder_name].append(filename)
@@ -278,18 +279,18 @@ def extract_and_replace_paths(text: str, folder_name: str) -> Tuple[str, List[Di
 
             # 遍历工作空间目录下的所有子目录
             for root, dirs, files in os.walk(workspace_path):
-                print(f"root:{root}")
+                logger.info(f"root:{root}")
                 if root != workspace_path:  # 跳过根目录，因为已经在上面处理过了
                     # 获取相对路径
                     rel_path = os.path.relpath(root, workspace_path)
                     # 构建文件夹的唯一标识
                     folder_key = f"{folder_name}/{rel_path}"
-                    
+
                     # 初始化该文件夹的文件列表（如果不存在）
                     if folder_key not in subfolder_files_map:
                         subfolder_files_map[folder_key] = []
-                        print(f"subfolder_files_map: {subfolder_files_map}")
-                    
+                        logger.info(f"subfolder_files_map: {subfolder_files_map}")
+
                     for filename in files:
                         # 如果文件名不在该文件夹的列表中，则添加
                         if filename not in subfolder_files_map[folder_key]:
@@ -300,9 +301,9 @@ def extract_and_replace_paths(text: str, folder_name: str) -> Tuple[str, List[Di
                                 "name": filename,
                                 "path": full_rel_path
                             })
-                            print(f"dirs_result_list:{result_list}")
+                            logger.info(f"dirs_result_list:{result_list}")
         except Exception as e:
-            print(f"Error reading workspace directory: {e}")
+            logger.error(f"Error reading workspace directory: {str(e)}", exc_info=True)
 
     return new_text, result_list
 
@@ -310,24 +311,3 @@ def extract_and_replace_paths(text: str, folder_name: str) -> Tuple[str, List[Di
 def process_text_with_workspace(text: str) -> Tuple[str, List[Dict[str, str]]]:
     folder_name = get_last_folder_name()
     return extract_and_replace_paths(text, folder_name)
-
-
-if __name__ == "__main__":
-    # 创建Plan
-    plan = Plan("测试计划", [
-        "步骤1",
-        "步骤2",
-        "步骤3",
-        "步骤4",
-        "步骤5"
-    ])
-    # 设置依赖关系
-    plan.add_dependency(1, 0)  # 步骤2依赖于步骤1
-    plan.add_dependency(2, 0)  # 步骤3依赖于步骤1
-    plan.add_dependency(3, 1)  # 步骤4依赖于步骤2
-    plan.add_dependency(4, 2)  # 步骤5依赖于步骤3
-    plan.mark_step(0, "completed")
-    plan.mark_step(1, "completed")
-    plan.mark_step(2, "completed")
-    result = plan.get_ready_steps()
-    print(result)

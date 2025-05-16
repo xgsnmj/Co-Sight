@@ -22,6 +22,7 @@ from browser_use.browser.context import BrowserContext
 from langchain_openai import ChatOpenAI
 from browser_use.browser.context import BrowserContextConfig
 from browser_use import BrowserConfig
+from cosight_server.sdk.common.logger_util import logger
 
 
 class WebToolkit:
@@ -37,7 +38,7 @@ class WebToolkit:
         Returns:
             str: The simulation result to the task.
         """
-        print(f"start browser_use, task_prompt is {task_prompt}")
+        logger.info(f"start browser_use, task_prompt is {task_prompt}")
         try:
             # 检查是否在事件循环中
             try:
@@ -50,7 +51,7 @@ class WebToolkit:
                 loop = asyncio.new_event_loop()
                 return loop.run_until_complete(self.inner_browser_use(task_prompt))
         except Exception as e:
-            print(f"browser_use error {e}")
+            logger.error(f"browser_use error {str(e)}", exc_info=True)
             # 确保返回的是字符串而不是协程
             return f"browser_use error: {str(e)}"
 
@@ -81,17 +82,7 @@ class WebToolkit:
             return results.final_result()
 
         except Exception as e:
-            print("failed to use browser ", traceback.format_exc())
+            logger.error(f"failed to use browser: {str(e)}", exc_info=True)
             return "fail, because:{}".format(e)
         finally:
             await browser.close()
-
-
-if __name__ == '__main__':
-    web_toolkit = WebToolkit(
-        {"api_key": "",
-         "base_url": "https://api.deepseek.com/",
-         "model": "deepseek-chat"})
-    final_result = web_toolkit.browser_use(
-        "")
-    print(final_result)

@@ -18,6 +18,7 @@ import os
 from typing import List, Optional
 
 import pandas as pd
+from cosight_server.sdk.common.logger_util import logger
 
 
 def extract_excel_content(document_path: str):
@@ -53,7 +54,7 @@ def extract_excel_content(document_path: str) -> str:
     from openpyxl import load_workbook
     from xls2xlsx import XLS2XLSX
 
-    print(
+    logger.info(
         f"Calling extract_excel_content with document_path"
         f": {document_path}"
     )
@@ -63,7 +64,7 @@ def extract_excel_content(document_path: str) -> str:
             or document_path.endswith("xlsx")
             or document_path.endswith("csv")
     ):
-        print("Only xls, xlsx, csv files are supported.")
+        logger.info("Only xls, xlsx, csv files are supported.")
         return (
             f"Failed to process file {document_path}: "
             f"It is not excel format. Please try other ways."
@@ -75,7 +76,7 @@ def extract_excel_content(document_path: str) -> str:
             md_table = _convert_to_markdown(df)
             return f"CSV File Processed:\n{md_table}"
         except Exception as e:
-            print(f"Failed to process file {document_path}: {e}")
+            logger.error(f"Failed to process file {document_path}: {str(e)}", exc_info=True)
             return f"Failed to process file {document_path}: {e}"
 
     if document_path.endswith("xls"):
@@ -153,6 +154,3 @@ def extract_excel_content(document_path: str) -> str:
             """
 
     return result_str
-
-
-

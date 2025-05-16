@@ -22,6 +22,7 @@ import base64
 import numpy as np
 import soundfile as sf
 import asyncio
+from cosight_server.sdk.common.logger_util import logger
 
 
 class VisionTool():
@@ -99,5 +100,5 @@ class VisionTool():
         return full_response
 
     def ask_question_about_image(self, image_path_url, task_prompt):
-        print(f"Using Tool: {self.name}")
+        logger.info(f"Using Tool: {self.name}, image_path_url: {image_path_url}, task_prompt： {task_prompt}")
         return asyncio.run(self._run(image_path_url, task_prompt))

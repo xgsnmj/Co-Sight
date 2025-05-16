@@ -25,6 +25,7 @@ from app.agent_dispatcher.infrastructure.entity.AgentInstance import AgentInstan
 from app.cosight.agent.base.skill_to_tool import convert_skill_to_tool
 from app.cosight.llm.chat_llm import ChatLLM
 from app.cosight.task.time_record_util import time_record
+from cosight_server.sdk.common.logger_util import logger
 
 
 class BaseAgent:
@@ -49,15 +50,15 @@ class BaseAgent:
 
     def execute(self, messages: List[Dict[str, Any]], step_index=None, max_iteration=10):
         for i in range(max_iteration):
+            logger.info(f'act agent call with tools message: {messages}')
             response = self.llm.create_with_tools(messages, self.tools)
-            print(f"index: {i}, response:{response}")
-            
+            logger.info(f'act agent call with tools response: {response}')
+
             # Process initial response
             result = self._process_response(response, messages, step_index)
+            logger.info(f'iter {i} for {self.agent_instance.instance_name} call tools result: {result}')
             if result:
                 return result
-
-            print(f"iter {i} for {self.agent_instance.instance_name}")
 
         if max_iteration > 1:
             return self._handle_max_iteration(messages, step_index)
@@ -76,7 +77,7 @@ class BaseAgent:
 
         results = self._execute_tool_calls(response.tool_calls, step_index)
         messages.extend(results)
-        
+
         # Check for termination conditions
         for result in results:
             if result["name"] in ["terminate", "mark_step"]:
@@ -90,7 +91,7 @@ class BaseAgent:
             for tool_call in tool_calls:
                 function_name = tool_call.function.name
                 function_args = tool_call.function.arguments
-                
+
                 if function_name in self.functions:
                     futures.append(executor.submit(
                         self._execute_tool_call,
@@ -104,9 +105,9 @@ class BaseAgent:
                         self._execute_mcp_tool_call,
                         function_name=function_name,
                         function_args=function_args,
-                        tool_call_id = tool_call.id
+                        tool_call_id=tool_call.id
                     ))
-            
+
             for future in futures:
                 try:
                     results.append(future.result())
@@ -123,12 +124,11 @@ class BaseAgent:
         messages.append({"role": "user", "content": "Summarize the above conversation, use mark_step to mark the step"})
         mark_step_tools = [tool for tool in self.tools if tool['function']['name'] == 'mark_step']
         response = self.llm.create_with_tools(messages, mark_step_tools)
-        print(f"max_iteration response:{response}")
-        
+
         result = self._process_response(response, messages, step_index)
         if result:
             return result
-        
+
         return messages[-1].get("content")
 
     @time_record
@@ -224,4 +224,3 @@ class BaseAgent:
             if loop:
                 loop.close()
                 asyncio.set_event_loop(None)
-

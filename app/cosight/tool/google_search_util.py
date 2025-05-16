@@ -20,6 +20,9 @@ from bs4 import BeautifulSoup
 import random
 import asyncio
 import aiohttp
+from .scrape_website_toolkit import is_valid_url
+from cosight_server.sdk.common.logger_util import logger
+
 
 async def fetch_url_content(url: str) -> str:
     """Fetch and parse content from a given URL"""
@@ -34,8 +37,9 @@ async def fetch_url_content(url: str) -> str:
             'Accept-Language': 'en-US,en;q=0.5',
             'Connection': 'keep-alive'
         }
-        
-
+        if not is_valid_url(url):
+            logger.error(f'current url is valid {url}')
+            return f'current url is valid {url}'
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=headers, proxy=proxy) as response:
@@ -44,29 +48,32 @@ async def fetch_url_content(url: str) -> str:
                     content_type = response.headers.get('Content-Type', '')
                     if 'text/html' not in content_type:
                         return f"Non-HTML content: {content_type}"
-                        
+
                     html = await response.text()
                     soup = BeautifulSoup(html, 'html.parser')
-                    
+
                     # Remove unwanted elements
                     for element in soup(["script", "style", "nav", "footer", "iframe", "noscript"]):
                         element.decompose()
-                        
+
                     # Get clean text
                     text = soup.get_text(separator='\n')
                     # Clean up extra whitespace
                     lines = (line.strip() for line in text.splitlines())
                     chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
                     text = '\n'.join(chunk for chunk in chunks if chunk)
-                    
+
                     return text
                 else:
                     return f"HTTP Error: {response.status}"
-                    
-    except asyncio.TimeoutError:
+
+    except asyncio.TimeoutError as e:
+        logger.error(f"Request timed out: {str(e)}", exc_info=True)
         return "Request timed out"
     except Exception as e:
+        logger.error(f"Error fetching content: {str(e)}", exc_info=True)
         return f"Error fetching content: {str(e)}"
+
 
 def search_google(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
     """Use Google search engine to search information for the given query.
@@ -79,19 +86,19 @@ def search_google(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         List[Dict[str, Any]]: A list of dictionaries where each dictionary
             represents a search result.
     """
-    print(f"search google for {query}")
+    logger.info(f"search google for {query}")
     responses: List[Dict[str, Any]] = []
-    
+
     max_retries = 3
     for attempt in range(max_retries):
         try:
 
             links = list(search(query, num_results=max_results, proxy=proxy, advanced=True))
-            
+
             # Create a new event loop for the current thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
             # Format results and fetch content
             async def process_links():
                 tasks = []
@@ -108,35 +115,12 @@ def search_google(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
                         "content": fetch_results[idx]  # Add scraped content
                     }
                     responses.append(response)
-            
+
             loop.run_until_complete(process_links())
             loop.close()
             break  # Success, exit retry loop
         except Exception as e:
             if attempt == max_retries - 1:  # Last attempt failed
                 responses.append({"error": f"Google search failed after {max_retries} attempts: {e}"})
-    # print(f"search google for {responses}")
+    logger.info(f"search google for {responses}")
     return responses
-
-
-def main():
-    # Test search query
-    query = "中兴通讯"
-    results = search_google(query)
-    
-    # Print results
-    print("\nSearch Results:")
-    for result in results:
-        if "error" in result:
-            print(f"Error: {result['error']}")
-        else:
-            print(f"{result}")
-
-if __name__ == "__main__":
-    main()
-    # googleTrendsUrl = 'https://www.google.com/search'
-    # response = requests.get(googleTrendsUrl)
-    # if response.status_code == 200:
-    #     g_cookies = response.cookies.get_dict()
-    #     print(g_cookies)
-

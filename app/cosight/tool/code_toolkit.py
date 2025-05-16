@@ -20,9 +20,10 @@ from typing import List, Literal, Optional, Union
 from app.cosight.tool.interpreters.internal_python_interpreter import InternalPythonInterpreter
 from app.cosight.tool.interpreters.subprocess_interpreter import SubprocessInterpreter
 import threading
+from cosight_server.sdk.common.logger_util import logger
 
 if sys.platform == 'win32':
-    print('win32 replace shlex.split')
+    logger.info('win32 replace shlex.split')
     shlex.split = partial(shlex.split, posix=False)
 
 
@@ -87,7 +88,7 @@ class CodeToolkit:
         # ruff: noqa: E501
         content = f"Executed the code below:\n```py\n{code}\n```\n> Executed Results:\n{output}"
         if self.verbose:
-            print(content)
+            logger.info(content)
         return content
 
 
@@ -156,10 +157,3 @@ def with_timeout(timeout=None):
         return decorator(func)
 
     return decorator
-
-
-if __name__ == '__main__':
-    code = "1+1"
-    code_execution_toolkit = CodeExecutionToolkit(sandbox="internal_python", verbose=True)
-    result = code_execution_toolkit.execute_code(code)
-    print(f'result= {result}')

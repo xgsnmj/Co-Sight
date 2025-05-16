@@ -23,6 +23,7 @@ from app.agent_dispatcher.infrastructure.entity.Profile import Profile
 from app.agent_dispatcher.infrastructure.entity.RagWorkFlow import RagWorkFlow
 from app.agent_dispatcher.infrastructure.entity.Skill import Skill
 from app.agent_dispatcher.infrastructure.entity.SkillsOrchestration import SkillsOrchestration
+from cosight_server.sdk.common.logger_util import logger
 
 
 class AgentTemplate(BaseModel):
@@ -51,11 +52,13 @@ class AgentTemplate(BaseModel):
 
     def __init__(self, template_name: str, template_version: str, agent_type: str, display_name_zh: str,
                  display_name_en: str, description_zh: str, description_en: str, service_name: str,
-                 service_version: str, default_replay_zh: str, default_replay_en: str,profile: list[Profile] | None = None,
+                 service_version: str, default_replay_zh: str, default_replay_en: str,
+                 profile: list[Profile] | None = None,
                  icon: str | None = None, icon_name: str | None = None, skills: list[str | Skill] = None,
                  organizations: list[str | Organization] = None, knowledge: list[KnowledgeInfo] = None,
                  rag_workflow: list[RagWorkFlow] = None, max_iteration: int = 20, business_type: dict | None = None,
-                 reserved_map: dict | None = None, skills_orchestration: str | SkillsOrchestration | None = None, **data):
+                 reserved_map: dict | None = None, skills_orchestration: str | SkillsOrchestration | None = None,
+                 **data):
         local = locals()
         fields = self.model_fields
         args_data = dict((k, fields.get(k).default if v is None else v) for k, v in local.items() if k in fields)
@@ -91,7 +94,7 @@ class AgentTemplate(BaseModel):
                 values['skills_orchestration'] = SkillsOrchestration(**skills_orchestration)
             except Exception as e:
                 values['skills_orchestration'] = None
-                print(f"Failed to parse skills_orchestration: {e}")
+                logger.error(f"Failed to parse skills_orchestration: {e}", exc_info=True)
         return values
 
     def model_dump(self, **kwargs):

@@ -27,6 +27,7 @@ from app.cosight.agent.planner.task_plannr_agent import TaskPlannerAgent
 from app.cosight.task.task_manager import TaskManager
 from app.cosight.task.todolist import Plan
 from app.cosight.task.time_record_util import time_record
+from cosight_server.sdk.common.logger_util import logger
 
 
 class CoSight:
@@ -51,17 +52,17 @@ class CoSight:
         while True:
             ready_steps = self.plan.get_ready_steps()
             if not ready_steps:
-                print("No more ready steps to execute")
+                logger.info("No more ready steps to execute")
                 break
-            print(f"Found {ready_steps} ready steps to execute")
+            logger.info(f"Found {ready_steps} ready steps to execute")
 
             results = self.execute_steps(question, ready_steps)
-            print(f"All steps completed with results: {results}")
+            logger.info(f"All steps completed with results: {results}")
             # 可配置是否只在堵塞的时候再重规划，提高效率
             # todo 这里没有实时上报
             plan_report_event_manager.publish("plan_process", self.plan)
             # re_plan_result = self.task_planner_agent.re_plan(question, output_format)
-            # print(f"re-plan_result is {re_plan_result}")
+            # logger.info(f"re-plan_result is {re_plan_result}")
         return self.task_planner_agent.finalize_plan(question, output_format)
 
     def execute_steps(self, question, ready_steps):
@@ -75,12 +76,12 @@ class CoSight:
         def execute_step(step_index):
             semaphore.acquire()
             try:
-                print(f"Starting execution of step {step_index}")
+                logger.info(f"Starting execution of step {step_index}")
                 # 每个线程创建独立的TaskActorAgent实例
                 task_actor_agent = TaskActorAgent(create_actor_instance(f"actor_for_step_{step_index}"), self.act_llm,
                                                   self.vision_llm, self.tool_llm, self.plan_id)
                 result = task_actor_agent.act(question=question, step_index=step_index)
-                print(f"Completed execution of step {step_index} with result: {result}")
+                logger.info(f"Completed execution of step {step_index} with result: {result}")
                 result_queue.put((step_index, result))
             finally:
                 semaphore.release()
@@ -114,4 +115,4 @@ if __name__ == '__main__':
 
     # 运行CoSight
     result = cosight.execute("帮我写一篇中兴通讯的分析报告")
-    print(f"final result is {result}")
+    logger.info(f"final result is {result}")

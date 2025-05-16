@@ -17,6 +17,7 @@ import logging
 import os
 import platform
 import warnings
+from sys import exc_info
 from typing import Any, List, Optional, Type, Union
 
 from langchain_core.callbacks import (
@@ -25,7 +26,7 @@ from langchain_core.callbacks import (
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, model_validator
 
-logger = logging.getLogger(__name__)
+from cosight_server.sdk.common.logger_util import logger
 
 
 class ShellInput(BaseModel):
@@ -95,13 +96,13 @@ class ShellTool(BaseTool):  # type: ignore[override, override]
     """
 
     def _run(
-        self,
-        commands: Union[str, List[str]],
-        run_manager: Optional[CallbackManagerForToolRun] = None,
+            self,
+            commands: Union[str, List[str]],
+            run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Run commands and return final output."""
 
-        print(f"Executing command:\n {commands}")  # noqa: T201
+        logger.info(f"Executing command:\n {commands}")  # noqa: T201
 
         try:
             if self.ask_human_input:
@@ -129,7 +130,7 @@ class ShellTool(BaseTool):  # type: ignore[override, override]
         """
         # List of dangerous commands/patterns to block
         NOT_DANGEROUS_COMMANDS = [
-            'ls ', 'pip ','cat '
+            'ls ', 'pip ', 'cat '
         ]
 
         # Check for dangerous commands
@@ -142,18 +143,7 @@ class ShellTool(BaseTool):  # type: ignore[override, override]
                         return "Command execution was aborted or failed."
                     return result
                 except Exception as e:
+                    logger.error(f"Error executing command: {str(e)}", exc_info=True)
                     return f"Error executing command: {str(e)}"
         return f"Error: Command blocked for security reasons"
 
-
-
-if __name__=="__main__":
-    # 创建ShellTool实例
-    shell_tool = ShellTool()
-    # 执行简单命令（无需确认）
-    output = shell_tool.execute("playwright install")
-    print(output)
-
-    # 处理错误情况
-    output = shell_tool.execute("invalid_command")
-    print(output)

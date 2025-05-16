@@ -23,9 +23,7 @@ from lagent.actions.bing_browser import ContentFetcher
 from app.cosight.tool.deep_search.actions.web_page_reader import ContentFetcher
 from app.cosight.tool.deep_search.actions.base_action import ManusBaseAction
 from app.cosight.tool.deep_search.common.entity import SearchSource
-from cosight_server.sdk.common.logger_util import get_logger
-
-logger = get_logger("ai-search")
+from cosight_server.sdk.common.logger_util import logger
 
 
 class ManusWebSearch(ManusBaseAction):

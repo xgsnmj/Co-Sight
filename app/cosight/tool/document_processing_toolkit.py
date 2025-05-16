@@ -31,6 +31,8 @@ import xmltodict
 import asyncio
 import nest_asyncio
 from app.cosight.tool.excel_toolkit import extract_excel_content
+from cosight_server.sdk.common.logger_util import logger
+
 nest_asyncio.apply()
 
 
@@ -56,7 +58,7 @@ class DocumentProcessingToolkit:
         Returns:
             Tuple[bool, str]: A tuple containing a boolean indicating whether the document was processed successfully, and the content of the document (if success).
         """
-        print(f"Calling extract_document_content function with document_path=`{document_path}`")
+        logger.info(f"Calling extract_document_content function with document_path=`{document_path}`")
         if any(document_path.endswith(ext) for ext in ['txt', 'html', 'md']):
             with open(document_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -91,11 +93,11 @@ class DocumentProcessingToolkit:
 
             try:
                 data = xmltodict.parse(content)
-                print(f"The extracted xml data is: {data}")
+                logger.info(f"The extracted xml data is: {data}")
                 return data
 
             except Exception as e:
-                print(f"The raw xml data is: {content}")
+                logger.error(f"raise error: {str(e)}, The raw xml data is: {content}", exc_info=True)
                 return content
 
         if self._is_webpage(document_path):
@@ -143,7 +145,7 @@ class DocumentProcessingToolkit:
 
                     return extracted_text
                 except Exception as ex:
-                    print(f'parse document error : {str(ex)}')
+                    logger.error(f'parse document error : {str(ex)}', exc_info=True)
             return ""
 
     def _is_webpage(self, url: str) -> bool:
@@ -169,7 +171,7 @@ class DocumentProcessingToolkit:
 
         except requests.exceptions.RequestException as e:
             # raise RuntimeError(f"Error while checking the URL: {e}")
-            print(f"Error while checking the URL: {e}")
+            logger.error(f"Error while checking the URL: {str(e)}", exc_info=True)
             return False
 
         except TypeError:
@@ -191,7 +193,7 @@ class DocumentProcessingToolkit:
             return file_path
 
         except requests.exceptions.RequestException as e:
-            print(f"Error downloading the file: {e}")
+            logger.error(f"Error downloading the file: {str(e)}", exc_info=True)
 
     def _get_formatted_time(self) -> str:
         import time

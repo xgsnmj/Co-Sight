@@ -24,6 +24,7 @@ from colorama import Fore
 from app.cosight.tool.interpreters.base import BaseInterpreter
 from app.cosight.tool.interpreters.interpreter_error import InterpreterError
 
+from cosight_server.sdk.common.logger_util import logger
 
 class SubprocessInterpreter(BaseInterpreter):
     r"""SubprocessInterpreter is a class for executing code files or code
@@ -186,13 +187,13 @@ class SubprocessInterpreter(BaseInterpreter):
             temp_file.unlink()
 
         if self.print_stdout and stdout:
-            print("======stdout======")
-            print(Fore.GREEN + stdout + Fore.RESET)
-            print("==================")
+            logger.info("======stdout======")
+            logger.info(Fore.GREEN + stdout + Fore.RESET)
+            logger.info("==================")
         if self.print_stderr and stderr:
-            print("======stderr======")
-            print(Fore.RED + stderr + Fore.RESET)
-            print("==================")
+            logger.info("======stderr======")
+            logger.info(Fore.RED + stderr + Fore.RESET)
+            logger.info("==================")
 
         # Build the execution result
         exec_result = ""

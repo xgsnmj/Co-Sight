@@ -22,9 +22,7 @@ from functools import partial
 from typing import List, Dict, AsyncGenerator
 from lagent.schema import ModelStatusCode
 
-from cosight_server.sdk.common.logger_util import get_logger
-
-logger = get_logger("ai-search")
+from cosight_server.sdk.common.logger_util import logger
 
 class LLMClient:
     """LLM客户端基类"""

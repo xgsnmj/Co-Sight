@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Literal, Optional, TypeAlias, Union
 
 import requests
+from cosight_server.sdk.common.logger_util import logger
 
 
 class SearchToolkit:
@@ -57,7 +58,7 @@ class SearchToolkit:
             )
         except wikipedia.exceptions.WikipediaException as e:
             result = f"An exception occurred during the search: {e}"
-        print(f'search_wiki result = {result}')
+        logger.info(f'search_wiki result = {result}')
         return result
 
     def search_linkup(
@@ -216,7 +217,7 @@ class SearchToolkit:
 
         # If no answer found, return an empty list
 
-        print(f'search_duckduckgo result = {responses}')
+        logger.info(f'search_duckduckgo result = {responses}')
         return responses
 
     def search_brave(
@@ -467,7 +468,7 @@ class SearchToolkit:
             # Handle specific exceptions or general request exceptions
             responses.append({"error": "google search failed."})
         # If no answer found, return an empty list
-        print(f'search_google result = {responses}')
+        logger.info(f'search_google result = {responses}')
         return responses
 
     def query_wolfram_alpha(
@@ -681,15 +682,8 @@ class SearchToolkit:
 
         try:
             results = client.search(query, max_results=num_results, **kwargs)
-            print(f'tavily_search result = {results}')
+            logger.info(f'tavily_search result = {results}')
             return results
         except Exception as e:
+            logger.error(f'error": f"An unexpected error occurred: {str(e)}', exc_info=True)
             return [{"error": f"An unexpected error occurred: {e!s}"}]
-
-
-if __name__ == '__main__':
-    toolKit = SearchToolkit()
-    result = toolKit.tavily_search("哪吒", 5)
-    result = toolKit.search_google("哪吒", 5)
-    result = toolKit.search_duckduckgo("哪吒")
-    print(result)

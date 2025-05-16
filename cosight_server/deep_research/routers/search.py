@@ -25,14 +25,13 @@ from fastapi.responses import StreamingResponse
 
 from llm import llm_for_plan, llm_for_act, llm_for_tool, llm_for_vision
 from cosight_server.deep_research.services.i18n_service import i18n
-from cosight_server.sdk.common.logger_util import get_logger
+from cosight_server.sdk.common.logger_util import logger
 
 # 引入CoSight所需的依赖
 from app.cosight.task.plan_report_manager import plan_report_event_manager
 from app.cosight.task.todolist import Plan
 from CoSight import CoSight
 
-logger = get_logger("ai-search")
 searchRouter = APIRouter()
 
 # 使用从环境变量获取的WORKSPACE_PATH
@@ -40,7 +39,7 @@ WORKSPACE_PATH = os.environ.get('WORKSPACE_PATH')
 logger.info(f"Using WORKSPACE_PATH: {WORKSPACE_PATH}")
 
 # 确保logs目录存在
-LOGS_PATH = os.path.join(WORKSPACE_PATH, 'logs')
+LOGS_PATH = os.path.join(WORKSPACE_PATH, 'plans')
 if not os.path.exists(LOGS_PATH):
     os.makedirs(LOGS_PATH)
 
@@ -194,7 +193,7 @@ async def search(request: Request, params: Any = Body(None)):
             try:
                 # 等待队列中的数据，设置超时防止无限等待
                 data = await asyncio.wait_for(plan_queue.get(), timeout=60.0)
-                # print(f"queue_data:{data}")
+                # logger.info(f"queue_data:{data}")
                 if isinstance(data, dict) and "result" in data and data['result']:
                     latest_plan = data
                     latest_plan["status_text"] = "执行完成"

@@ -20,25 +20,27 @@ sys.path.insert(1, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+from cosight_server.sdk.common.logger_util import logger
 
 # 添加这段代码来加载.env文件
 try:
     from dotenv import load_dotenv
+
     # 尝试从当前目录加载.env文件
     env_loaded = load_dotenv()
     if env_loaded:
-        print("已成功加载.env配置文件")
+        logger.info("已成功加载.env配置文件")
     else:
-        print("警告: .env文件未找到或为空")
-except ImportError:
-    print("警告: python-dotenv模块未安装，无法自动加载.env文件")
+        logger.info("警告: .env文件未找到或为空")
+except ImportError as ex:
+    logger.error(f"警告: python-dotenv模块未安装，无法自动加载.env文件: {str(ex)}", exc_info=True)
 except Exception as e:
-    print(f"加载.env文件时出错: {e}")
+    logger.error(f"加载.env文件时出错: {str(e)}", exc_info=True)
 
 # 添加这段代码来验证环境变量
-print("\n=== 环境变量检查 ===")
+logger.info("\n=== 环境变量检查 ===")
 env_vars_to_check = [
-    "ENVIRONMENT", 
+    "ENVIRONMENT",
     "API_KEY",
     "API_BASE_URL",
     "MODEL_NAME",
@@ -65,54 +67,52 @@ for var in env_vars_to_check:
         # 对API密钥只显示前几个字符，保护敏感信息
         if "API_KEY" in var and len(value) > 8:
             masked_value = value[:4] + "****" + value[-4:]
-            print(f"✓ {var} = {masked_value}")
+            logger.info(f"✓ {var} = {masked_value}")
         else:
-            print(f"✓ {var} = {value}")
+            logger.info(f"✓ {var} = {value}")
     else:
         if var in ["PROXY", "TAVILY_API_KEY", "GOOGLE_API_KEY", "SEARCH_ENGINE_ID"]:
-            print(f"ℹ {var} 未设置 (可选)")
+            logger.info(f"ℹ {var} 未设置 (可选)")
         else:
-            print(f"✗ {var} 未设置")
+            logger.info(f"✗ {var} 未设置")
 
 # 检查可选的模型配置组
-print("\n=== 可选模型配置检查 ===")
+logger.info("\n=== 可选模型配置检查 ===")
 for config_group in optional_model_configs:
     group_name = config_group[0].split("_")[0]  # 提取PLAN/ACT/TOOL/VISION
     api_key = os.getenv(config_group[0])
     if api_key:
-        print(f"✓ {group_name} 模型配置已设置")
+        logger.info(f"✓ {group_name} 模型配置已设置")
         # 可以进一步检查该组中的其他配置
         for var in config_group[1:]:
             value = os.getenv(var)
             if value:
                 if "API_KEY" in var and len(value) > 8:
                     masked_value = value[:4] + "****" + value[-4:]
-                    print(f"  ✓ {var} = {masked_value}")
+                    logger.info(f"  ✓ {var} = {masked_value}")
                 else:
-                    print(f"  ✓ {var} = {value}")
+                    logger.info(f"  ✓ {var} = {value}")
             else:
-                print(f"  ✗ {var} 未设置")
+                logger.info(f"  ✗ {var} 未设置")
     else:
-        print(f"ℹ {group_name} 模型配置未设置 (可选)")
-        
-print("=== 环境变量检查结束 ===\n")
+        logger.info(f"ℹ {group_name} 模型配置未设置 (可选)")
+
+logger.info("=== 环境变量检查结束 ===\n")
 
 from cosight_server.deep_research.services.i18n_service import i18n
 # custom_config的初始化必须放在最开始
 from cosight_server.sdk.common.config import custom_config
 from cosight_server.deep_research.common.config import custom_config_data
+
 custom_config.initialize(custom_config_data)
 
-from cosight_server.sdk.common.logger_util import get_logger
-
-logger = get_logger("ai-search")
 # 添加项目根目录到 Python 路径
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 logger.info(f"root_dir is >>>>>> {root_dir}")
 sys.path.insert(0, root_dir)
 
 current_file_path = os.path.abspath(__file__)
-work_dir = os.path.abspath(os.path.join(current_file_path, "../../"))
+work_dir = os.path.abspath(os.path.join(current_file_path, "../../../"))
 os.chdir(work_dir)
 logger.info(f"current work dir is >>>>>> {os.getcwd()}")
 
@@ -124,7 +124,7 @@ workspace_env = os.getenv("WORKSPACE_PATH_ENV")
 WORKSPACE_PATH = workspace_env + "/work_space" if workspace_env else "work_space"
 logger.info(f"workspace path is >>>>>> {WORKSPACE_PATH}")
 # 确保logs目录存在
-LOGS_PATH = os.path.join(WORKSPACE_PATH, 'logs')
+LOGS_PATH = os.path.join(WORKSPACE_PATH, 'plans')
 if not os.path.exists(LOGS_PATH):
     os.makedirs(LOGS_PATH)
 # 设置环境变量供子模块使用
@@ -156,11 +156,6 @@ app.mount(f"{base_url}/upload_files", StaticFiles(directory=upload_dir), name="u
 app.mount(f"{base_url}/work_space", StaticFiles(directory=WORKSPACE_PATH), name="work_space")
 logger.info(f"work_space已挂载到: {base_url}/work_space")
 
-# 挂载前端静态文件目录
-# 原来的代码尝试不正确的路径
-# web_dir = os.path.join(os.path.dirname(root_dir), "web")
-# if not os.path.exists(web_dir):
-#     web_dir = "cosight_server/web"
 
 # 修改为：使用与WORKSPACE_PATH相同的逻辑来定位web目录
 web_dir_env = os.getenv("WEB_DIR_ENV")
@@ -216,6 +211,7 @@ app.include_router(commonRouter, prefix=str(custom_config.get("base_api_url")))
 app.include_router(chatRouter, prefix=str(custom_config.get("base_chatbot_api_url")))
 app.include_router(feedbackRouter, prefix=str(custom_config.get("base_chatbot_api_url")))
 
+
 @app.middleware("http")
 async def global_exception_handler(request: Request, call_next):
     try:
@@ -224,18 +220,19 @@ async def global_exception_handler(request: Request, call_next):
         logger.error(f"Unhandled exception: {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"message": "An unexpected error occurred.", "details": str(e)})
 
+
 if __name__ == '__main__':
-    print("\n【提示】请在浏览器访问: http://localhost:7788/cosight/\n")
+    logger.info("\n【提示】请在浏览器访问: http://localhost:7788/cosight/\n")
     import argparse
     import uvicorn
-    
+
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description=i18n.t('ai_search_plugin_description'))
     parser.add_argument('-p', '--port', type=int, help=i18n.t('ai_search_port_help'), default=None)
     args = parser.parse_args()
-    
+
     logger.info('*****************')
-    logger.info('plugin server staring...')
+    logger.info('cosight server staring...')
     args.port = custom_config.get("search_port")
 
     uvicorn.run(app=app, host="0.0.0.0", port=int(args.port))

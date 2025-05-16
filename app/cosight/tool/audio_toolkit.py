@@ -23,6 +23,7 @@ import numpy as np
 import soundfile as sf
 import asyncio
 from urllib.parse import urlparse
+from cosight_server.sdk.common.logger_util import logger
 
 
 class AudioTool:
@@ -116,5 +117,5 @@ class AudioTool:
         return full_response
 
     def speech_to_text(self, audio_path: str, task_prompt: str, ):
-        print(f"Using Tool: {self.name}")
+        logger.info(f"Using Tool: {self.name}, audio_path: {audio_path}, task_prompt: {task_prompt}")
         return asyncio.run(self.audio_recognition(audio_path, task_prompt))

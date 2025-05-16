@@ -22,9 +22,7 @@ from lagent import JsonParser, BaseAction, BaseParser, ActionReturn, ActionStatu
 from lagent.actions.parser import ParseError
 
 from app.cosight.tool.deep_search.common.prompts import select_example1_cn, select_example2_cn
-from cosight_server.sdk.common.logger_util import get_logger
-
-logger = get_logger("ai-search")
+from cosight_server.sdk.common.logger_util import logger
 
 class ZTEActionParser(JsonParser):
     model_format: str = ''
@@ -193,7 +191,6 @@ class ManusBaseAction(BaseAction):
         return new_search_results
 
     def open_url(self, url: str) -> dict:
-        # print(f'Start Browsing: {url}')
         web_success, web_content = self.fetcher.fetch(url)
         if web_success:
             return {'type': 'text', 'content': web_content}

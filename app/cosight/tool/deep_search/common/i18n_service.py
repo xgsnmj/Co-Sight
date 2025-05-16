@@ -59,20 +59,3 @@ class I18nService:
 
 # 创建全局实例
 i18n = I18nService()
-
-
-if __name__ == '__main__':
-    # 测试中文
-    i18n.set_locale('zh')
-    print(i18n.t('hello', '张三', '李四'))
-    print(i18n.t('sys_prompt'))
-
-    # 测试英文
-    i18n.set_locale('en')
-    print(i18n.t('hello', 'John', 'Smith'))
-    print(i18n.t('sys_prompt'))
-
-    locale = i18n.get_locale()
-    print(f"locale: {locale}")
-
-    print(i18n.t('ai_search_plugin_name'))

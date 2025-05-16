@@ -20,6 +20,7 @@ from app.agent_dispatcher.infrastructure.entity.exception.ZaeFrameworkException 
     NaeFrameworkException
 
 from app.agent_dispatcher.domain.plan.action.skill.mcp.server import MCPServerStdio, MCPServerSse
+from cosight_server.sdk.common.logger_util import logger
 
 mcp_servers = []
 
@@ -45,7 +46,7 @@ class MCPEngine:
             tools = await server.list_tools()
             return tools
         except Exception as e:
-            print(f"Error invoking MCP tool {name}: {e}")
+            logger.info(f"Error invoking MCP tool {name}: {e}")
             return []
         finally:
             if server:
@@ -60,7 +61,7 @@ class MCPEngine:
             await server.connect()
             result = await server.call_tool(tool_name, input_json)
         except Exception as e:
-            print(f"Error invoking MCP tool {tool_name}: {e}")
+            logger.error(f"Error invoking MCP tool {tool_name}: {e}",exc_info=True)
             raise NaeFrameworkException(MCP_ERROR, f"Error invoking MCP tool {tool_name}")
         finally:
             if server:
@@ -78,7 +79,7 @@ class MCPEngine:
                     tool_output_list.append(item.model_dump())
             tool_output = ";".join(tool_output_list)
         else:
-            print(f"Errored MCP tool result: {result}")
+            logger.error(f"Errored MCP tool result: {result}")
             tool_output = "Error running tool."
 
         return tool_output

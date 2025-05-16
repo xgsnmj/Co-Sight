@@ -20,9 +20,7 @@ from app.cosight.tool.deep_search.common.entity import ModelInfo, SearchResult, 
 from app.cosight.tool.deep_search.model.model_service import ModelService
 from app.cosight.tool.deep_search.services.flash_search_service import flash_search_handler
 from app.cosight.tool.deep_search.common.i18n_service import i18n
-from cosight_server.sdk.common.logger_util import get_logger
-
-logger = get_logger("ai-search")
+from cosight_server.sdk.common.logger_util import logger
 
 class DeepSearchToolkit:
     def __init__(self, model_info: ModelInfo, web_search_info: WebSearchInfo):

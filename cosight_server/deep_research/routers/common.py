@@ -20,9 +20,7 @@ from fastapi.params import Body
 
 from cosight_server.sdk.common.api_result import json_result
 from cosight_server.sdk.common.cache import Cache
-from cosight_server.sdk.common.logger_util import get_logger
-
-logger = get_logger("ai-search")
+from cosight_server.sdk.common.logger_util import logger
 
 commonRouter = APIRouter()
 

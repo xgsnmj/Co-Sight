@@ -19,6 +19,7 @@ import re
 from typing import Any, Optional, Type
 import requests
 from bs4 import BeautifulSoup
+from cosight_server.sdk.common.logger_util import logger
 
 
 class ScrapeWebsiteTool:
@@ -26,14 +27,6 @@ class ScrapeWebsiteTool:
     description: str = "A tool that can be used to read a website content."
     website_url: Optional[str] = None
     cookies: Optional[dict] = None
-    headers: Optional[dict] = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.google.com/",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-    }
 
     def __init__(
             self,
@@ -49,6 +42,14 @@ class ScrapeWebsiteTool:
                 self.cookies = {cookies["name"]: os.getenv(cookies["value"])}
         else:
             raise RuntimeError("website_url can not be null")
+        self.headers: Optional[dict] = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.google.com/",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
 
     async def _run(
             self,
@@ -57,6 +58,7 @@ class ScrapeWebsiteTool:
         page = requests.get(
             website_url,
             timeout=15,
+            verify=False,
             headers=self.headers,
             cookies=self.cookies if self.cookies else {},
         )
@@ -71,7 +73,39 @@ class ScrapeWebsiteTool:
 
 
 def fetch_website_content(website_url):
-    scrapeWebsiteTool = ScrapeWebsiteTool(website_url)
-    print(f'starting fetch {website_url} Content')
-    return asyncio.run(scrapeWebsiteTool._run(website_url))
+    try:
+        if not is_valid_url(website_url):
+            logger.error(f'current url is valid {website_url}')
+            return f'current url is valid {website_url}'
+        scrapeWebsiteTool = ScrapeWebsiteTool(website_url)
+        logger.info(f'starting fetch {website_url} Content')
+        # 检查是否在事件循环中
+        try:
+            loop = asyncio.get_running_loop()
+            # 如果已经在事件循环中，创建新任务
+            task = loop.create_task(scrapeWebsiteTool._run(website_url))
+            return loop.run_until_complete(task)
+        except RuntimeError:
+            # 如果没有事件循环，创建新的
+            loop = asyncio.new_event_loop()
+            return loop.run_until_complete(scrapeWebsiteTool._run(website_url))
+    except Exception as e:
+        logger.error(f"fetch_website_content error {str(e)}", exc_info=True)
+        # 确保返回的是字符串而不是协程
+        return f"fetch_website_content error: {str(e)}"
 
+
+from urllib.parse import urlparse
+import requests
+
+
+def is_valid_url(url: str) -> bool:
+    return is_valid_pattern_url(url)
+
+
+def is_valid_pattern_url(url: str) -> bool:
+    try:
+        result = urlparse(url)
+        return all([result.scheme in ("http", "https"), result.netloc])
+    except Exception:
+        return False

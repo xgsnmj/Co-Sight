@@ -17,8 +17,8 @@ from threading import Lock
 from typing import Callable, Dict, List, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 
-
 from app.cosight.task.todolist import Plan
+from cosight_server.sdk.common.logger_util import logger
 
 
 class EventManager:
@@ -46,7 +46,7 @@ class EventManager:
         try:
             callback(plan)
         except Exception as e:
-            print(f"Callback failed: {e}")
+            logger.error(f"Callback failed: {str(e)}", exc_info=True)
 
 
 plan_report_event_manager = EventManager()

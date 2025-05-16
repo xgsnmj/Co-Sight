@@ -38,6 +38,8 @@ from app.cosight.tool.audio_toolkit import AudioTool
 from app.cosight.tool.video_analysis_toolkit import VideoTool
 from config.config import get_tavily_config
 from app.cosight.tool.html_visualization_toolkit import create_html_report
+from cosight_server.sdk.common.logger_util import logger
+
 
 class TaskActorAgent(BaseAgent):
     def __init__(self, agent_instance: AgentInstance, llm: ChatLLM,
@@ -95,10 +97,11 @@ class TaskActorAgent(BaseAgent):
                          "ask_question_about_video": video_toolkit.ask_question_about_video,
                          "fetch_website_content": fetch_website_content,
                          "extract_document_content": doc_toolkit.extract_document_content,
-                         "create_html_report": lambda title=None, include_charts=True, chart_types=['all'], output_filename=None: create_html_report(
-                             title=title, 
-                             include_charts=include_charts, 
-                             chart_types=chart_types, 
+                         "create_html_report": lambda title=None, include_charts=True, chart_types=['all'],
+                                                      output_filename=None: create_html_report(
+                             title=title,
+                             include_charts=include_charts,
+                             chart_types=chart_types,
                              output_filename=output_filename,
                              user_query=self.question
                          ),
@@ -116,10 +119,11 @@ class TaskActorAgent(BaseAgent):
         self.history.append(
             {"role": "user", "content": actor_execute_task_prompt(question, step_index, self.plan)})
         try:
-            result = self.execute(self.history,step_index=step_index)
+            result = self.execute(self.history, step_index=step_index)
             if self.plan.step_statuses.get(self.plan.steps[step_index], "") == "in_progress":
-                self.plan.mark_step(step_index, step_status="completed",step_notes=str(result))
+                self.plan.mark_step(step_index, step_status="completed", step_notes=str(result))
             return result
         except Exception as e:
+            logger.error(f'act agent execute error: {str(e)}', exc_info=True)
             self.plan.mark_step(step_index, step_status="blocked", step_notes=str(e))
             return str(e)

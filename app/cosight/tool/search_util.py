@@ -20,6 +20,9 @@ from bs4 import BeautifulSoup
 import random
 import asyncio
 import aiohttp
+import os
+from cosight_server.sdk.common.logger_util import logger
+from .scrape_website_toolkit import is_valid_url
 
 async def fetch_url_content(url: str) -> str:
     """Fetch and parse content from a given URL"""
@@ -34,8 +37,11 @@ async def fetch_url_content(url: str) -> str:
             'Accept-Language': 'en-US,en;q=0.5',
             'Connection': 'keep-alive'
         }
-
+        if not is_valid_url(url):
+            logger.error(f'current url is valid {url}')
+            return f'current url is valid {url}'
         timeout = aiohttp.ClientTimeout(total=10)
+        proxy = os.environ.get('PROXY_URL', '')
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=headers, proxy=proxy) as response:
                 if response.status == 200:
@@ -43,34 +49,36 @@ async def fetch_url_content(url: str) -> str:
                     content_type = response.headers.get('Content-Type', '')
                     if 'text/html' not in content_type:
                         return f"Non-HTML content: {content_type}"
-                        
+
                     html = await response.text()
                     soup = BeautifulSoup(html, 'html.parser')
-                    
+
                     # Remove unwanted elements
                     for element in soup(["script", "style", "nav", "footer", "iframe", "noscript"]):
                         element.decompose()
-                        
+
                     # Get clean text
                     text = soup.get_text(separator='\n')
                     # Clean up extra whitespace
                     lines = (line.strip() for line in text.splitlines())
                     chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
                     text = '\n'.join(chunk for chunk in chunks if chunk)
-                    
+
                     return text
                 else:
                     return f"HTTP Error: {response.status}"
-                    
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
+        logger.error(f"Request timed out: {str(e)}", exc_info=True)
         return "Request timed out"
     except Exception as e:
+        logger.error(f"Error fetching content: {str(e)}", exc_info=True)
         return f"Error fetching content: {str(e)}"
+
 
 def search_baidu(
         query: str
-    ) -> List[Dict[str, Any]]:
-    print(f'starting search content {query} use baidu')
+) -> List[Dict[str, Any]]:
+    logger.info(f'starting search content {query} use baidu')
     """Use Baidu search engine to search information for the given query.
 
     This function queries the Baidu API for related topics to the given search term.
@@ -84,20 +92,20 @@ def search_baidu(
         List[Dict[str, Any]]: A list of dictionaries where each dictionary
             represents a search result.
     """
-    print(f"search baidu for {query}")
+    logger.info(f"search baidu for {query}")
     responses: List[Dict[str, Any]] = []
     max_retries = 3
-    
+
     for attempt in range(max_retries):
         try:
             results = search(query)
             # Limit results to max_results
             results = results
-            
+
             # Create a new event loop for the current thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
             async def process_results():
                 tasks = []
                 for i, result in enumerate(results, start=1):
@@ -114,7 +122,7 @@ def search_baidu(
                         "content": fetch_results[idx]  # Add scraped content
                     }
                     responses.append(response)
-            
+
             loop.run_until_complete(process_results())
             loop.close()
             break  # Success, exit retry loop
@@ -122,20 +130,5 @@ def search_baidu(
             if attempt == max_retries - 1:  # Last attempt failed
                 responses.append({"error": f"Baidu search failed after {max_retries} attempts: {e}"})
             continue
-            
-    print(f"search baidu for response: {responses}")
+    logger.info(f"search baidu for response: {responses}")
     return responses
-
-
-def main():
-    # Test search with a sample query
-    query = "中兴通讯"
-    results = search_baidu(query)
-    
-    # Print the results
-    print(f"Search results for '{query}':")
-    for result in results:
-        print(result)
-
-if __name__ == "__main__":
-    main()
