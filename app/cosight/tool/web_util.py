@@ -15,7 +15,7 @@
 
 import asyncio
 import traceback
-
+import os
 from browser_use import Agent
 from browser_use.browser.browser import Browser
 from browser_use.browser.context import BrowserContext
@@ -59,15 +59,16 @@ class WebToolkit:
         try:
             browser = Browser(
                 config=BrowserConfig(
-                    headless=False,
-                    disable_security=False,
-                    _force_keep_browser_alive=True,
+                    headless=os.environ.get('HEADLESS', False),
+                    disable_security=os.environ.get('DISABLE_SECURITY', False),
+                    _force_keep_browser_alive=os.environ.get('FORCE_KEEP_BROWSER_ALIVE', False),
                     new_context_config=BrowserContextConfig(
-                        minimum_wait_page_load_time=5.0,
-                        wait_for_network_idle_page_load_time=5.0,
-                        wait_between_actions=3.0,
-                        _force_keep_context_alive=True,
-                        disable_security=False,
+                        minimum_wait_page_load_time=os.environ.get('MINIMUM_WAIT_PAGE_LOAD_TIME', 5.0),
+                        wait_for_network_idle_page_load_time=os.environ.get('WAIT_FOR_NETWORK_IDLE_PAGE_LOAD_TIME',
+                                                                            5.0),
+                        wait_between_actions=os.environ.get('WAIT_BETWEEN_ACTIONS', 3.0),
+                        user_agent=os.environ.get('USER_AGENT',
+                                                  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36')
                     ),
                 ))
             agent = Agent(
