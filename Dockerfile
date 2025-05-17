@@ -4,6 +4,10 @@ FROM python:3.11-slim
 # 设置工作目录
 WORKDIR /home/Co-Sight
 
+ENV PYTHONUNBUFFERED=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_NO_CACHE_DIR=1
+
 # 复制当前目录下的所有文件到容器的 /home/Co-Sight 目录中
 COPY . /home/Co-Sight
 
@@ -11,7 +15,7 @@ COPY . /home/Co-Sight
 RUN chmod -R 777 /home/Co-Sight
 
 # 安装项目所需的依赖
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --progress-bar off -r requirements.txt
 
 # 启动服务
 CMD ["python", "/home/Co-Sight/cosight_server/deep_research/main.py"]
