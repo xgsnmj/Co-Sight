@@ -168,7 +168,6 @@ def ask_llm(prompt, temperature=0.3, max_tokens=4096):
         )
 
         if response.status_code == 200:
-            logger.info(" 成功")
             content = response.json()["choices"][0]["message"]["content"]
             if content is not None:
                 # 处理带有'</think>'标签的模型
@@ -1217,8 +1216,6 @@ def create_visualization(visualization_info, chart_types):
         # 保存为静态图像
         img_bytes = fig.to_image(format="png", width=800, height=500, scale=2)
         img_base64 = base64.b64encode(img_bytes).decode('utf-8')
-
-        logger.info(" 成功")
 
         # 准备返回数据
         result = {

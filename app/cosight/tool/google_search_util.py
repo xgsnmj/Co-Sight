@@ -39,10 +39,9 @@ async def fetch_url_content(url: str) -> str:
         }
         if not is_valid_url(url):
             return f'current url is valid {url}'
-        timeout = aiohttp.ClientTimeout(total=10)
-        proxy = os.environ.get('PROXY_URL', '')
+        timeout = aiohttp.ClientTimeout(total=180)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url,verify=False, headers=headers, proxy=proxy) as response:
+            async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     # Check content type
                     content_type = response.headers.get('Content-Type', '')
@@ -90,11 +89,10 @@ def search_google(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
     responses: List[Dict[str, Any]] = []
 
     max_retries = 3
-    proxy = os.environ.get('PROXY_URL', '')
     for attempt in range(max_retries):
         try:
 
-            links = list(search(query, num_results=max_results, proxy=proxy, advanced=True))
+            links = list(search(query, num_results=max_results, advanced=True))
 
             # Create a new event loop for the current thread
             loop = asyncio.new_event_loop()
