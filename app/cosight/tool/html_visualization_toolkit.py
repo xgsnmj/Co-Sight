@@ -108,7 +108,7 @@ try:
     if not DEEPSEEK_API_KEY:
         DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 except Exception as e:
-    logger.info(f"初始化LLM配置时出错: {str(e)}")
+    logger.error(f"初始化LLM配置时出错: {str(e)}", exc_info=True)
     DEEPSEEK_BASE_URL = "https://api.deepseek.ai.com/v1"
     DEEPSEEK_API_KEY = ""
     DEEPSEEK_MODEL = "deepseek-chat"
@@ -686,6 +686,7 @@ If the content is not suitable for visualization, then return:
                 'reason': f"JSON解析错误: {str(e)}"
             }
         except Exception as e:
+            logger.error(f"Unhandled exception: {e}", exc_info=True)
             # 返回一个默认的响应
             return {
                 'suitable_for_visualization': False,
@@ -693,6 +694,7 @@ If the content is not suitable for visualization, then return:
             }
 
     except Exception as e:
+        logger.error(f"Unhandled exception: {e}", exc_info=True)
         return {
             'suitable_for_visualization': False,
             'reason': f"分析错误: {str(e)}"
@@ -1531,6 +1533,7 @@ Please provide your choices in the order above, or simply indicate to use all de
         return params
 
     except Exception as e:
+        logger.error(f'raise error: {str(e)}', exc_info=True)
         return {}
 
 
@@ -2746,6 +2749,7 @@ def create_html_report(title=None, include_charts=True, chart_types=['all'], out
                     return viz_id
 
                 except Exception as e:
+                    logger.error(f'raise error: {str(e)}', exc_info=True)
                     return None
 
             # 准备所有可视化任务

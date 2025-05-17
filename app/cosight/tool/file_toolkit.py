@@ -120,9 +120,11 @@ class FileToolkit:
                 lines = lines[start:end]
 
             return ''.join(lines)
-        except PermissionError:
+        except PermissionError as e:
+            logger.error(f"Error: Permission denied. Try with sudo=True if appropriate: {str(e)}",exc_info=True)
             return "Error: Permission denied. Try with sudo=True if appropriate"
         except Exception as e:
+            logger.error(f"Error reading file: {str(e)}", exc_info=True)
             return f"Error reading file: {str(e)}"
 
     def file_str_replace(self, file: str, old_str: str, new_str: str, sudo: bool = False) -> str:
@@ -161,9 +163,11 @@ class FileToolkit:
                 f.write(new_content)
 
             return f"Successfully replaced '{old_str}' with '{new_str}' in {absolute_path}"
-        except PermissionError:
+        except PermissionError as e:
+            logger.error(f"Error: Permission denied. Try with sudo=True if appropriate: {str(e)}", exc_info=True)
             return "Error: Permission denied. Try with sudo=True if appropriate"
         except Exception as e:
+            logger.error(f"Error replacing string in file: {str(e)}", exc_info=True)
             return f"Error replacing string in file: {str(e)}"
 
     def file_find_in_content(self, file: str, regex: str, sudo: bool = False) -> str:
@@ -203,11 +207,14 @@ class FileToolkit:
                 return f"No matches found for pattern '{regex}' in {absolute_path}"
 
             return f"Matches found in {absolute_path}:\n" + "\n".join(matches)
-        except re.error:
+        except re.error as e:
+            logger.error(f"Error: Invalid regular expression pattern: {str(e)}", exc_info=True)
             return "Error: Invalid regular expression pattern"
-        except PermissionError:
+        except PermissionError as e:
+            logger.error(f"Error: Permission denied. Try with sudo=True if appropriate: {str(e)}", exc_info=True)
             return "Error: Permission denied. Try with sudo=True if appropriate"
         except Exception as e:
+            logger.error(f"Error searching file content: {str(e)}", exc_info=True)
             return f"Error searching file content: {str(e)}"
 
     def _write_text_file(

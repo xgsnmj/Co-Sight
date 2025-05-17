@@ -119,6 +119,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             await session.initialize()
             self.session = session
         except Exception as e:
+            logger.error(f"Unhandled exception: {e}", exc_info=True)
             await self.cleanup()
             raise
 

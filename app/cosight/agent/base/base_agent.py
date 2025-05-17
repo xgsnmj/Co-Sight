@@ -112,6 +112,7 @@ class BaseAgent:
                 try:
                     results.append(future.result())
                 except Exception as e:
+                    logger.error(f"Unhandled exception: {e}", exc_info=True)
                     results.append({
                         "role": "tool",
                         "name": function_name,
@@ -163,6 +164,7 @@ class BaseAgent:
                 "tool_call_id": tool_call_id
             }
         except Exception as e:
+            logger.error(f"Unhandled exception: {e}", exc_info=True)
             return {
                 "role": "tool",
                 "name": function_name,
@@ -213,6 +215,7 @@ class BaseAgent:
                     "content": f"Function {function_name} not found in available functions"
                 }
         except Exception as e:
+            logger.error(f"Unhandled exception: {e}", exc_info=True)
             return {
                 "role": "tool",
                 "name": function_name,

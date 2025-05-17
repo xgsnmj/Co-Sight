@@ -75,7 +75,6 @@ class ScrapeWebsiteTool:
 def fetch_website_content(website_url):
     try:
         if not is_valid_url(website_url):
-            logger.error(f'current url is valid {website_url}')
             return f'current url is valid {website_url}'
         scrapeWebsiteTool = ScrapeWebsiteTool(website_url)
         logger.info(f'starting fetch {website_url} Content')

@@ -33,7 +33,7 @@ def loop_sync_extract_entity(task_name, content) -> dict:
     try:
         return _run_loop_task(task_func=_sync_extract_entity, params={"task_name":task_name, "content":content})
     except Exception as e:
-        logger.exception(str(e))
+        logger.exception(str(e),exc_info=True)
 
 
 def _run_loop_task(task_func, params) -> dict:

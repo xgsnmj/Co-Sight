@@ -46,7 +46,7 @@ class MCPEngine:
             tools = await server.list_tools()
             return tools
         except Exception as e:
-            logger.info(f"Error invoking MCP tool {name}: {e}")
+            logger.error(f"Error invoking MCP tool {name}: {e}",exc_info=True)
             return []
         finally:
             if server:

@@ -72,9 +72,7 @@ class ManusBaseAction(BaseAction):
             outputs = getattr(self, name)(**inputs)
         except Exception as exc:
             logger.error(f"ManusBaseAction call {name} error >>>>>>>>>> {exc}", exc_info=True)
-            error_stack = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-            logger.error(f"ManusBaseAction call {name} error >>>>>>>>>> {exc}\nStack trace:\n{error_stack}")
-            
+
             return ActionReturn(
                 inputs,
                 type=self.name,

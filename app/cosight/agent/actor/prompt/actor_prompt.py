@@ -119,6 +119,7 @@ def actor_execute_task_prompt(task, step_index, plan):
     try:
         files_list = "\n".join([f"  - {f}" for f in os.listdir(workspace_path)])
     except Exception as e:
+        logger.error(f"Unhandled exception: {e}", exc_info=True)
         files_list = f"  - Error listing files: {str(e)}"
     
     # Check if llm_for_act is using OpenRouter Claude

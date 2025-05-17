@@ -14,7 +14,7 @@
 #    under the License.
 
 from typing import List, Dict, Any
-
+import os
 from googlesearch import search
 from bs4 import BeautifulSoup
 import random
@@ -38,11 +38,11 @@ async def fetch_url_content(url: str) -> str:
             'Connection': 'keep-alive'
         }
         if not is_valid_url(url):
-            logger.error(f'current url is valid {url}')
             return f'current url is valid {url}'
         timeout = aiohttp.ClientTimeout(total=10)
+        proxy = os.environ.get('PROXY_URL', '')
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, headers=headers, proxy=proxy) as response:
+            async with session.get(url,verify=False, headers=headers, proxy=proxy) as response:
                 if response.status == 200:
                     # Check content type
                     content_type = response.headers.get('Content-Type', '')
@@ -90,6 +90,7 @@ def search_google(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
     responses: List[Dict[str, Any]] = []
 
     max_retries = 3
+    proxy = os.environ.get('PROXY_URL', '')
     for attempt in range(max_retries):
         try:
 
@@ -120,6 +121,7 @@ def search_google(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
             loop.close()
             break  # Success, exit retry loop
         except Exception as e:
+            logger.error(f"Unhandled exception: {e}", exc_info=True)
             if attempt == max_retries - 1:  # Last attempt failed
                 responses.append({"error": f"Google search failed after {max_retries} attempts: {e}"})
     logger.info(f"search google for {responses}")

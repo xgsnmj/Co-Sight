@@ -125,5 +125,5 @@ class LLMClient:
                     yield ModelStatusCode.END, content, None
 
         except Exception as e:
-            logger.error(f"Error in stream_chat: {str(e)}")
+            logger.error(f"Error in stream_chat: {str(e)}",exc_info=True)
             yield ModelStatusCode.SERVER_ERR, str(e), None

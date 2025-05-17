@@ -129,6 +129,7 @@ class SearchToolkit:
                 return {"error": f"Invalid output_type: {output_type}"}
 
         except Exception as e:
+            logger.error(f'raise error: {str(e)}', exc_info=True)
             return {"error": f"An unexpected error occurred: {e!s}"}
 
     def search_duckduckgo(
@@ -504,6 +505,7 @@ class SearchToolkit:
             res = client.query(query)
 
         except Exception as e:
+            logger.error(f'raise error: {str(e)}', exc_info=True)
             return f"Wolfram Alpha wasn't able to answer it. Error: {e}"
 
         pased_result = self._parse_wolfram_result(res)
