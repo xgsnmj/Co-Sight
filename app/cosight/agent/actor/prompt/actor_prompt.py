@@ -17,6 +17,7 @@ import os
 import platform
 import inspect
 import sys
+from cosight_server.sdk.common.logger_util import logger
 
 # Add path to import llm.py
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../")))

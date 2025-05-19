@@ -86,7 +86,7 @@ class TaskActorAgent(BaseAgent):
                          "tavily_search": search_toolkit.tavily_search,
                          "image_search": tavily_search.search,
                          "audio_recognition": audio_toolkit.speech_to_text,
-                         "search_duckgo": search_toolkit.search_duckduckgo,
+                         # "search_duckgo": search_toolkit.search_duckduckgo,
                          "execute_code": code_toolkit.execute_code,
                          "file_saver": file_toolkit.file_saver,
                          "file_read": file_toolkit.file_read,

@@ -62,7 +62,7 @@ def create_actor_template(template_name):
                    extract_document_content_skill(),
                    create_html_report_skill(),
                    fetch_website_content_skill(),
-                   search_duckgo_skill(),
+                   # search_duckgo_skill(),
                    search_wiki_skill(),
                    audio_recognition_skill(),
                    ask_question_about_video_skill()],
