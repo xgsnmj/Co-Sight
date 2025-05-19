@@ -145,41 +145,15 @@ def read_text_files_from_workspace():
     return text_files
 
 
-def ask_llm(prompt, temperature=0.3, max_tokens=4096):
+def ask_llm(prompt):
     """通过LLM获取回答"""
     try:
         logger.info("正在向LLM发送请求...")
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
-        }
-
-        data = {
-            "model": DEEPSEEK_MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature,
-            "max_tokens": max_tokens
-        }
-
-        response = requests.post(
-            f"{DEEPSEEK_BASE_URL}/chat/completions",
-            headers=headers,
-            json=data
-        )
-
-        if response.status_code == 200:
-            content = response.json()["choices"][0]["message"]["content"]
-            if content is not None:
-                # 处理带有'</think>'标签的模型
-                if '</think>' in content:
-                    content = content.split('</think>')[-1].strip('\n')
-                # 对于不带标签的模型，直接使用完整响应
-                return content
-            return content
-        else:
-            logger.error(f" 失败: {response.status_code}")
-            logger.error(f"LLM调用失败: {response.status_code} - {response.text}")
-            return None
+        messages = [{"role": "user", "content": prompt}]
+        logger.info(f"调用LLM请求: {messages}")
+        result = llm_for_tool.chat_to_llm(messages)
+        logger.info(f"调用LLM返回响应: {result}")
+        return result
     except Exception as e:
         logger.error(f"调用LLM时出错: {str(e)}", exc_info=True)
         return None
