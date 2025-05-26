@@ -38,7 +38,7 @@ class TaskPlannerAgent(BaseAgent):
         super().__init__(agent_instance, llm, all_functions)
 
     def create_plan(self, question, output_format=""):
-        self.history.append({"role": "system", "content": planner_system_prompt()})
+        self.history.append({"role": "system", "content": planner_system_prompt(question)})
         self.history.append({"role": "user", "content": planner_create_plan_prompt(question, output_format)})
         result = self.execute(self.history, max_iteration=1)
         return result

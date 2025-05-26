@@ -14,6 +14,8 @@
 #    under the License.
 
 from typing import List, Dict, Any
+
+from jupyter_server.auth import passwd
 from openai import OpenAI
 
 from app.cosight.task.time_record_util import time_record
@@ -53,17 +55,29 @@ class ChatLLM:
         """
         Create a chat completion with support for function/tool calls
         """
+        import time
+        import json
         # 清洗提示词，去除None
         messages = ChatLLM.clean_none_values(messages)
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=self.temperature,
-            max_tokens=self.max_tokens
-        )
-        logger.info(f"LLM with tools chat completions response is {response}")
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=self.temperature
+                )
+                logger.info(f"LLM with tools chat completions response is {response}")
+                break
+            except Exception as e:
+                logger.warning(f"JSON decode error: {e} on attempt {attempt + 1}, retrying...", exc_info=True)
+                if attempt == max_retries:
+                    logger.error(f"Failed to create after {max_retries + 1} attempts.")
+                    raise
+                time.sleep(3)  # 增加等待时间，避免频繁重试
+
         # 去除think标签
         content = response.choices[0].message.content
         if content is not None and '</think>' in content:

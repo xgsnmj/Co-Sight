@@ -13,10 +13,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import re
 from typing import Dict
 
 from app.agent_dispatcher.infrastructure.entity.AgentInstance import AgentInstance
-from app.cosight.agent.actor.prompt.actor_prompt import actor_system_prompt, actor_execute_task_prompt
+from app.cosight.agent.actor.prompt.actor_prompt import actor_system_prompt, actor_system_prompt_zh, actor_execute_task_prompt, actor_execute_task_prompt_zh
 from app.cosight.agent.base.base_agent import BaseAgent
 from app.cosight.llm.chat_llm import ChatLLM
 from app.cosight.task.plan_report_manager import plan_report_event_manager
@@ -109,15 +110,26 @@ class TaskActorAgent(BaseAgent):
         if functions:
             all_functions = functions.update(functions)
         super().__init__(agent_instance, llm, all_functions)
-        self.history.append({"role": "system", "content": actor_system_prompt()})
+        is_chinese = bool(re.search(r'[\u4e00-\u9fff]', self.plan.title)) if self.plan.title else True
+        if is_chinese:
+            sys_prompt = actor_system_prompt_zh()
+        else:
+            sys_prompt = actor_system_prompt()
+        self.history.append({"role": "system", "content": sys_prompt})
 
     @time_record
     def act(self, question, step_index):
         self.question = question  # Store the question for use in tools
         self.plan.mark_step(step_index, step_status="in_progress")
         plan_report_event_manager.publish("plan_process", self.plan)
+        is_chinese = bool(re.search(r'[\u4e00-\u9fff]', self.question)) if self.question else True
+        if is_chinese:
+            task_prompt = actor_execute_task_prompt_zh(question, step_index, self.plan)
+        else:
+            task_prompt = actor_execute_task_prompt(question, step_index, self.plan)
+
         self.history.append(
-            {"role": "user", "content": actor_execute_task_prompt(question, step_index, self.plan)})
+            {"role": "user", "content": task_prompt})
         try:
             result = self.execute(self.history, step_index=step_index)
             if self.plan.step_statuses.get(self.plan.steps[step_index], "") == "in_progress":
