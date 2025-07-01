@@ -24,10 +24,10 @@ from mcp import ClientSession, StdioServerParameters, Tool as MCPTool, stdio_cli
 from mcp.client.sse import sse_client
 from mcp.types import CallToolResult, JSONRPCMessage
 
-from zagents_framework.app.agent_dispatcher.infrastructure.entity.exception.ZaeFrameworkException import \
+from app.agent_dispatcher.infrastructure.entity.exception.ZaeFrameworkException import \
     NaeFrameworkException
-from zagents_framework.app.agent_dispatcher.infrastructure.entity.exception.error_code_consts import MCP_ERROR
-from zagents_framework.app.common.infrastructure.utils.log import logger
+from app.agent_dispatcher.infrastructure.entity.exception.error_code_consts import MCP_ERROR
+from app.common.logger_util import logger
 
 
 class MCPServer(abc.ABC):
