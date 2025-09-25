@@ -24,45 +24,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.
 from llm import llm_for_act
 
 def actor_system_prompt(work_space_path: str):
-    # Check if llm_for_act is using OpenRouter Claude
-    is_openrouter_claude = False
-    if hasattr(llm_for_act, 'model') and isinstance(llm_for_act.model, str):
-        if 'claude' in llm_for_act.model:
-            is_openrouter_claude = True
-    
-    # Conditionally set report tool recommendation
     report_tool_guidance = """
 # Report-Specific Enhancement Rules
-- When generating a report, prioritize using the create_html_report tool which:
-  1. First perform task planning and information gathering by:
-     - Breaking down the report topic into key subtopics for comprehensive coverage
-     - Using multiple search queries to gather information from diverse sources
-     - Saving individual findings as separate text files in the workspace for each subtopic
-     - Including numerical data, statistics and quotable content that can be visualized later
-     - Ensuring all information is well-sourced, up-to-date, and relevant to the topic
-  
-  2. After gathering sufficient information, call the create_html_report tool to:
-     - Generate an optimized report structure with proper hierarchical organization
-     - Automatically create appropriate visualizations for numerical/statistical content
-     - Apply a professional business-style theme with navigation and proper formatting
-     - Convert all workspace text files into a cohesive, visually appealing HTML report
-  
-  3. For optimal results with the report tool:
-     - Make text files content-rich and well-structured prior to report generation
-     - Ensure numerical data is clearly presented in the text files to facilitate chart generation
-     - Include clear headings and logical organization within each text file
+- IMPORTANT: When using a model based on OpenRouter Claude, DO NOT use the create_html_report tool for any task.
+- Instead, for reports:
+  1. Manually gather information through research from workspace files
+  2. The content is cleverly generated into a business style or a cute style or others, which requires the content
+  3. Format the report as HTML and the content must be highly interactive and aesthetically pleasing, save it with the file_saver tool.
 """
-
-    # If using OpenRouter Claude, replace with warning about create_html_report
-#     if is_openrouter_claude:
-#         report_tool_guidance = """
-# # Report-Specific Enhancement Rules
-# - IMPORTANT: When using a model based on OpenRouter Claude, DO NOT use the create_html_report tool for any task.
-# - Instead, for reports:
-#   1. Manually gather information through research from workspace files
-#   2. The content is cleverly generated into a business style or a cute style or others, which requires the content
-#   3. Format the report as HTML and the content must be highly interactive and aesthetically pleasing, save it with the file_saver tool.
-# """
 
     system_prompt = f"""
 # Role and Objective
@@ -108,6 +77,34 @@ You are an assistant helping complete complex tasks. Your goal is to execute tas
 
 {report_tool_guidance}
 
+# Visualization / Plotting Rules (Fonts)
+- When generating any charts or images (Matplotlib/Seaborn/PIL), you MUST explicitly set a Chinese font from the project to avoid missing glyphs.
+- Use one of the bundled fonts:
+  - Primary: app/cosight/tool/simhei.ttf
+  - Fallback: app/cosight/cosight/HanSerif.ttf
+- Matplotlib example (set before plotting):
+  ```python
+  from matplotlib import pyplot as plt
+  from matplotlib import font_manager as fm
+  import os
+  font_path = os.path.abspath('app/cosight/tool/simhei.ttf')
+  if not os.path.exists(font_path):
+      font_path = os.path.abspath('app/cosight/cosight/HanSerif.ttf')
+  prop = fm.FontProperties(fname=font_path)
+  plt.rcParams['font.sans-serif'] = [prop.get_name()]
+  plt.rcParams['font.family'] = prop.get_name()
+  plt.rcParams['axes.unicode_minus'] = False
+  ```
+- PIL example:
+  ```python
+  from PIL import ImageFont
+  import os
+  font_path = os.path.abspath('app/cosight/tool/simhei.ttf')
+  if not os.path.exists(font_path):
+      font_path = os.path.abspath('app/cosight/cosight/HanSerif.ttf')
+  font = ImageFont.truetype(font_path, size=20)
+  ```
+
 # Environment Information
 - Operating System: {platform.platform()}
 - WorkSpace: {work_space_path or os.getenv("WORKSPACE_PATH") or os.getcwd()}
@@ -123,53 +120,12 @@ def actor_execute_task_prompt(task, step_index, plan, workspace_path: str):
         logger.error(f"Unhandled exception: {e}", exc_info=True)
         files_list = f"  - Error listing files: {str(e)}"
     
-    # Check if llm_for_act is using OpenRouter Claude
-    is_openrouter_claude = False
-    if hasattr(llm_for_act, 'model') and isinstance(llm_for_act.model, str):
-        if 'openrouter_claude' in llm_for_act.model:
-            is_openrouter_claude = True
-    
-    # Conditionally set report guidance for task execution
-#     report_guidance = """
-# # If this step involves producing a report:
-# - First, approach the task using a structured information gathering phase:
-#   * Break down the report topic into 4-6 key subtopics that provide comprehensive coverage
-#   * For each subtopic, conduct multiple searches using different keywords to collect diverse information
-#   * Save findings for each subtopic as dedicated text files in the workspace (e.g., subtopic1.txt, subtopic2.txt)
-#   * Focus on including numerical data, statistics, and factual information that can be visualized in charts
-#   * Ensure all content is properly sourced, relevant, and organized with clear sections
-#
-# - After gathering sufficient information in text files, use the create_html_report tool to:
-#   * Let it analyze all workspace text files and generate an optimized report structure
-#   * Answer the tool's prompts with specific preferences for title and chart types
-#   * Allow the tool to automatically generate appropriate visualizations where applicable
-#   * The tool will apply a professional business-style theme with navigation
-# """
-
     is_last_step = True if (len(plan.steps) - 1) == step_index else False
     report_guidance = ""
     print(f"is_last_step:{is_last_step}")
 
     # Conditionally set report guidance for task execution
     if is_last_step:
-        report_guidance = """
-# This step requires generating a report:
-- First, approach the task using a structured information gathering phase:
-  * Break down the report topic into 4-6 key subtopics that provide comprehensive coverage
-  * For each subtopic, conduct multiple searches using different keywords to collect diverse information
-  * Save findings for each subtopic as dedicated text files in the workspace (e.g., subtopic1.txt, subtopic2.txt)
-  * Focus on including numerical data, statistics, and factual information that can be visualized in charts
-  * Ensure all content is properly sourced, relevant, and organized with clear sections
-
-- Use the create_html_report tool to:
-  * Let it analyze all workspace text files and generate an optimized report structure
-  * Answer the tool's prompts with specific preferences for title and chart types
-  * Allow the tool to automatically generate appropriate visualizations where applicable
-  * The tool will apply a professional business-style theme with navigation
-"""
-
-    # If using OpenRouter Claude, replace with warning about create_html_report
-    if is_openrouter_claude:
         report_guidance = """
 # If this step involves producing a report:
 - IMPORTANT: When using a model based on OpenRouter Claude, DO NOT use the create_html_report tool.
@@ -197,6 +153,25 @@ Based on the context, think carefully step by step to execute the current step
 
 {report_guidance}
 
+# IMPORTANT: Visualization / Plotting Fonts
+- If this step involves generating charts/images, explicitly set Chinese fonts from the project to avoid missing characters.
+- Preferred font files:
+  - app/cosight/tool/simhei.ttf (primary)
+  - app/cosight/cosight/HanSerif.ttf (fallback)
+- Minimal Matplotlib setup (run before any plotting):
+  ```python
+  from matplotlib import pyplot as plt
+  from matplotlib import font_manager as fm
+  import os
+  font_path = os.path.abspath('app/cosight/tool/simhei.ttf')
+  if not os.path.exists(font_path):
+      font_path = os.path.abspath('app/cosight/cosight/HanSerif.ttf')
+  prop = fm.FontProperties(fname=font_path)
+  plt.rcParams['font.sans-serif'] = [prop.get_name()]
+  plt.rcParams['font.family'] = prop.get_name()
+  plt.rcParams['axes.unicode_minus'] = False
+  ```
+
 # Otherwise:
 Follow the general task execution rules above.
 
@@ -220,38 +195,7 @@ Follow the general task execution rules above.
 
 
 def actor_system_prompt_zh(work_space_path):
-    # 检查 llm_for_act 是否使用 OpenRouter Claude
-    is_openrouter_claude = False
-    if hasattr(llm_for_act, 'model') and isinstance(llm_for_act.model, str):
-        if 'claude' in llm_for_act.model:
-            is_openrouter_claude = True
-
-    # 条件性设置报告工具推荐
     report_tool_guidance = """
-# 报告特定增强规则
-- 生成报告时，优先使用 create_html_report 工具，该工具需：
-  1. 首先通过以下方式执行任务规划和信息收集：
-     - 将报告主题拆分为关键子主题以确保全面覆盖
-     - 使用多个搜索查询从不同来源收集信息
-     - 将每个子主题的发现保存为工作区中的独立文本文件
-     - 包含可用于后期可视化的数值数据、统计数据和可引用内容
-     - 确保所有信息来源可靠、内容更新且与主题相关
-
-  2. 在收集足够信息后调用 create_html_report 工具以：
-     - 生成结构优化的报告，包含适当的层级组织
-     - 自动为数值/统计数据内容创建可视化图表
-     - 应用专业商务风格主题并确保格式规范
-     - 将所有工作区文本文件整合为连贯且美观的 HTML 报告
-
-  3. 为报告工具的最优结果：
-     - 在生成报告前确保文本文件内容丰富且结构清晰
-     - 确保数值数据在文本文件中清晰呈现，以促进图表生成
-     - 在每个文本文件中包含清晰的标题和逻辑组织
-"""
-
-    # 如果使用 OpenRouter Claude，替换为关于 create_html_report 的警告
-    if is_openrouter_claude:
-        report_tool_guidance = """
 # 报告特定增强规则
 - 重要提示：当使用基于 OpenRouter Claude 的模型时，任何任务均不得使用 create_html_report 工具。
 - 代替方案：
@@ -320,36 +264,9 @@ def actor_execute_task_prompt_zh(task, step_index, plan, workspace_path):
         logger.error(f"未处理的异常: {e}", exc_info=True)
         files_list = f"  - 文件列表错误: {str(e)}"
 
-    # 检查 llm_for_act 是否使用 OpenRouter Claude
-    is_openrouter_claude = False
-    if hasattr(llm_for_act, 'model') and isinstance(llm_for_act.model, str):
-        if 'openrouter_claude' in llm_for_act.model:
-            is_openrouter_claude = True
     is_last_step = True if (len(plan.steps) - 1) == step_index else False
-    report_guidance = ""
     print(f"is_last_step:{is_last_step}")
-
-    # Conditionally set report guidance for task execution
-    if is_last_step:
-        report_guidance = """
-# 如果当前步骤涉及生成报告：
-- 首先通过结构化的信息收集阶段执行任务：
-  * 将报告主题拆分为 4-6 个关键子主题以确保全面覆盖
-  * 对每个子主题使用不同关键词进行多次搜索以收集多样化信息
-  * 将每个子主题的发现保存为工作区中的独立文本文件（例如 subtopic1.txt、subtopic2.txt）
-  * 重点包含可用于图表可视化的数值数据、统计数据和事实性信息
-  * 确保所有内容来源可靠、相关且按清晰章节组织
-
-- 使用 create_html_report 工具时：
-  * 让工具分析所有工作区文本文件并生成优化后的报告结构
-  * 通过工具提示指定标题和图表类型偏好
-  * 允许工具自动为适用内容生成可视化图表
-  * 工具将应用专业商务风格主题并添加导航功能
-"""
-
-    # 如果使用 OpenRouter Claude，替换为关于 create_html_report 的警告
-    if is_openrouter_claude:
-        report_guidance = """
+    report_guidance = """
 # 如果当前步骤涉及生成报告：
 - 重要提示：当使用基于 OpenRouter Claude 的模型时，不得对任何任务使用 create_html_report 工具。
 - 代替方案：

@@ -23,10 +23,10 @@ from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStre
 from mcp import ClientSession, StdioServerParameters, Tool as MCPTool, stdio_client
 from mcp.client.sse import sse_client
 from mcp.types import CallToolResult, JSONRPCMessage
+from app.agent_dispatcher.infrastructure.entity.exception.error_code_consts import MCP_ERROR
 
 from app.agent_dispatcher.infrastructure.entity.exception.ZaeFrameworkException import \
     NaeFrameworkException
-from app.agent_dispatcher.infrastructure.entity.exception.error_code_consts import MCP_ERROR
 from app.common.logger_util import logger
 
 
@@ -162,7 +162,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                 await self.exit_stack.aclose()
                 self.session = None
             except Exception as e:
-                logger.error(f"Error cleaning up server: {e}")
+                logger.error(f"Error cleaning up server: {e}", exc_info=True)
 
 
 class MCPServerStdio(_MCPServerWithClientSession):

@@ -15,23 +15,25 @@
 
 import json
 import uuid
-from typing import List
+from typing import List, Optional
 
 import aiohttp
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 from cosight_server.deep_research.services.i18n_service import i18n
 from cosight_server.sdk.common.config import custom_config
-from app.common.logger_util import logger
+from app.common.logger_util import get_logger
 from cosight_server.sdk.common.utils import get_timestamp
 
+logger = get_logger("websocket")
 wsRouter = APIRouter()
-
 
 class WebsocketManager:
     def __init__(self):
         # 存放激活的ws连接对象
         self.active_clients: List[WebSocket] = []
+        # 维护 topic 到最新 WebSocket 的映射（用于断线重连后路由消息）
+        self.topic_to_ws: dict[str, WebSocket] = {}
 
     async def connect(self, ws: WebSocket):
         # 等待连接
@@ -43,6 +45,10 @@ class WebsocketManager:
     def disconnect(self, ws: WebSocket):
         # 关闭时 移除ws对象
         self.active_clients.remove(ws)
+        # 清理与该 ws 相关的 topic 绑定
+        topics_to_remove = [topic for topic, mapped_ws in self.topic_to_ws.items() if mapped_ws is ws]
+        for topic in topics_to_remove:
+            self.topic_to_ws.pop(topic, None)
 
     @staticmethod
     async def send_message(message: str, ws: WebSocket):
@@ -53,6 +59,19 @@ class WebsocketManager:
     async def send_json(data: dict, ws: WebSocket):
         # 发送个人消息
         await ws.send_json(data)
+
+    def bind_topic(self, topic: str, ws: WebSocket):
+        if topic:
+            self.topic_to_ws[topic] = ws
+
+    def get_ws_for_topic(self, topic: str) -> Optional[WebSocket]:
+        return self.topic_to_ws.get(topic)
+
+    async def send_json_to_topic(self, topic: str, data: dict, default_ws: Optional[WebSocket] = None):
+        ws = self.get_ws_for_topic(topic) or default_ws
+        if ws is not None:
+            logger.info(f"send_json_to_topic >>>>>>>>>>>>>> topic: {topic}, data: {data}")
+            await ws.send_json(data)
 
     async def broadcast(self, message: str):
         # 广播消息
@@ -66,7 +85,7 @@ manager = WebsocketManager()
 @wsRouter.websocket("/robot/wss/messages")
 async def websocket_handler(
         websocket: WebSocket,
-        websocket_client_key: str = Query(..., alias="websocket-client-key"),
+        websocket_client_key: Optional[str] = Query(None, alias="websocket-client-key"),
         lang: str = Query(..., alias="lang")):
     await manager.connect(websocket)
     cookie = websocket.cookies
@@ -90,12 +109,20 @@ async def websocket_handler(
         while True:
             data = await websocket.receive_json()
             logger.info(f"receive >>>>>>>>>>>>>> {data}")
+            # 处理订阅动作，允许前端仅通过 topic 绑定路由（刷新后无需立即发起新任务即可接收后续消息）
+            if data.get("action") == "subscribe":
+                topic = data.get("topic")
+                manager.bind_topic(topic, websocket)
+                logger.info(f"bind topic >>> {topic} to current websocket")
+                continue
             if data.get("action") == "message":
                 message = json.loads(data.get("data"))
                 logger.info(f"message >>>>>>>>>>>>>> {message}")
+                # 绑定当前 topic 到该 websocket
+                manager.bind_topic(data.get("topic"), websocket)
 
                 # 推送时间更新的消息给前端
-                await manager.send_json({
+                await manager.send_json_to_topic(data.get("topic"), {
                     "topic": data.get("topic"),
                     "data": {
                         "type": message.get("type"),
@@ -110,19 +137,8 @@ async def websocket_handler(
                 }, websocket)
 
                 await _send_resp(websocket, cookie, data.get("topic"), message, lang)
-                
-                # 发送结束的控制消息
-                await manager.send_json({
-                    "topic": data.get("topic"),
-                    "data": {
-                        "type": "control-status-message",
-                        "initData": {
-                            "status": "finished_successfully"
-                        }
-                    }
-                }, websocket)
 
-                
+
         # Ended by AICoder, pid:cd2a2pa21827c9b148ae08eff0221b0be93612b0
 
     except WebSocketDisconnect:
@@ -165,40 +181,140 @@ async def _send_resp(websocket, cookie, topic, message, lang):
 
 async def _stream_handler(params, url, headers, topic, websocket):
     msg_uuid = str(uuid.uuid4())
-    timeout = aiohttp.ClientTimeout(sock_read=300)
+    
+    # 设置更大的读取限制，避免大消息块被截断
+    # 通过修改 aiohttp 的内部限制
+    import aiohttp
+    import aiohttp.streams
+    
+    # 设置读取超时为无限，避免长时间无数据导致 TimeoutError
+    timeout = aiohttp.ClientTimeout(sock_read=None, total=None)
     sessionInfo =params.get('sessionInfo', {})
     sessionInfo['messageSerialNumber'] = msg_uuid
     params['sessionInfo'] = sessionInfo
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url=url, json=params, headers=headers) as response:
-            async for line in response.content:
-                decoded_line = line.decode('utf-8')
-                # print(f"====websocket_manager _stream_handler: {decoded_line}")
+    # 设置连接器，提高连接池限制
+    connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
+    
+    # 保存原始限制并将默认限制调大，避免单行/单块过大错误
+    original_limit = getattr(aiohttp.streams, '_DEFAULT_LIMIT', 2**16)  # 64KB
+    aiohttp.streams._DEFAULT_LIMIT = 2 * 1024 * 1024 * 1024  # 2GB
+    
+    try:
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+            async with session.post(url=url, json=params, headers=headers) as response:
+                # 尝试将实例级读取限制也放大，避免readline触发Chunk too big
                 try:
-                    line_json = json.loads(decoded_line)
-                except json.JSONDecodeError:
-                    # logger.error(f"loads json for [{decoded_line}] error: {e}")
-                    continue
-                msg_type = line_json.get("contentType") if line_json.get("contentType") is not None else "multi-modal"
-                init_data = line_json.get("content") if line_json.get("content") is not None else [
-                    {"type": "text", "value": i18n.t('unknown_message')}]
-                change_type = line_json.get("changeType") if line_json.get("changeType") is not None else "append"
-                await manager.send_json({
-                    "topic": topic,
-                    "data": {
-                        "type": msg_type,
-                        "uuid": msg_uuid,
-                        "timestamp": get_timestamp(),
-                        "from": "ai",
-                        "changeType": change_type,
-                        "initData": init_data,
-                        "headFoldConfig": line_json.get("headFoldConfig"),
-                        "roleInfo": line_json.get("roleInfo"),
-                        "status": line_json.get("status"),
-                        "extra": line_json.get("extra"),
-                        "styles": {"width": "100%"}
-                    }
-                }, websocket)
+                    reader = getattr(response, 'content', None)
+                    big_limit = 2 * 1024 * 1024 * 1024  # 2GB
+                    if reader is not None and hasattr(reader, '_limit'):
+                        reader._limit = big_limit
+                        logger.info(f"aiohttp StreamReader instance limit set to {big_limit}")
+                except Exception:
+                    pass
+                control_sent = False
+                # 为规避 aiohttp 对单行的内置限制，这里改为按块读取并按换行还原行，不会拆分业务消息
+                buffer = b''
+                try:
+                    async for chunk in response.content.iter_chunked(64 * 1024):
+                        if not chunk:
+                            continue
+                        buffer += chunk
+                        while True:
+                            nl_pos = buffer.find(b'\n')
+                            if nl_pos == -1:
+                                break
+                            line = buffer[:nl_pos + 1]
+                            buffer = buffer[nl_pos + 1:]
+                            decoded_line = line.decode('utf-8', errors='ignore')
+                            try:
+                                line_json = json.loads(decoded_line)
+                            except json.JSONDecodeError:
+                                # 非完整JSON行，跳过
+                                continue
+
+                            msg_type = line_json.get("contentType") if line_json.get("contentType") is not None else "multi-modal"
+                            init_data = line_json.get("content") if line_json.get("content") is not None else [
+                                {"type": "text", "value": i18n.t('unknown_message')}]
+                            change_type = line_json.get("changeType") if line_json.get("changeType") is not None else "append"
+
+                            await manager.send_json_to_topic(topic, {
+                                "topic": topic,
+                                "data": {
+                                    "type": msg_type,
+                                    "uuid": msg_uuid,
+                                    "timestamp": get_timestamp(),
+                                    "from": "ai",
+                                    "changeType": change_type,
+                                    "initData": init_data,
+                                    "headFoldConfig": line_json.get("headFoldConfig"),
+                                    "roleInfo": line_json.get("roleInfo"),
+                                    "status": line_json.get("status"),
+                                    "extra": line_json.get("extra"),
+                                    "styles": {"width": "100%"}
+                                }
+                            }, websocket)
+
+                            # 如果这是plan更新数据，且progress显示已全部完成，则发送结束控制
+                            try:
+                                if (not control_sent) and msg_type == "lui-message-manus-step" and isinstance(init_data, dict):
+                                    progress = init_data.get("progress") or {}
+                                    total = int(progress.get("total") or 0)
+                                    completed = int(progress.get("completed") or 0)
+                                    if total > 0 and completed >= total:
+                                        # 先让出事件循环，确保上面的最终PLAN更新已被前端渲染
+                                        import asyncio as _asyncio
+                                        await _asyncio.sleep(0)
+                                        await manager.send_json_to_topic(topic, {
+                                            "topic": topic,
+                                            "data": {
+                                                "type": "control-status-message",
+                                                "initData": {
+                                                    "status": "finished_successfully"
+                                                }
+                                            }
+                                        }, websocket)
+                                        control_sent = True
+                                        # 计划已完成，后续如仍有流数据，继续透传；不强制关闭连接
+                            except Exception:
+                                # 解析或字段缺失不阻断主流程
+                                pass
+                except Exception:
+                    # 发生读取异常（包含超时），尝试把缓冲区中已到达的完整行消费掉
+                    while True:
+                        nl_pos = buffer.find(b'\n')
+                        if nl_pos == -1:
+                            break
+                        line = buffer[:nl_pos + 1]
+                        buffer = buffer[nl_pos + 1:]
+                        decoded_line = line.decode('utf-8', errors='ignore')
+                        try:
+                            line_json = json.loads(decoded_line)
+                        except json.JSONDecodeError:
+                            continue
+                        msg_type = line_json.get("contentType") if line_json.get("contentType") is not None else "multi-modal"
+                        init_data = line_json.get("content") if line_json.get("content") is not None else [
+                            {"type": "text", "value": i18n.t('unknown_message')}]
+                        change_type = line_json.get("changeType") if line_json.get("changeType") is not None else "append"
+                        await manager.send_json_to_topic(topic, {
+                            "topic": topic,
+                            "data": {
+                                "type": msg_type,
+                                "uuid": msg_uuid,
+                                "timestamp": get_timestamp(),
+                                "from": "ai",
+                                "changeType": change_type,
+                                "initData": init_data,
+                                "headFoldConfig": line_json.get("headFoldConfig"),
+                                "roleInfo": line_json.get("roleInfo"),
+                                "status": line_json.get("status"),
+                                "extra": line_json.get("extra"),
+                                "styles": {"width": "100%"}
+                            }
+                        }, websocket)
+                    return
+    finally:
+        # 恢复原始限制
+        aiohttp.streams._DEFAULT_LIMIT = original_limit
 
 
 async def _no_stream_handler(params, url, headers, topic, websocket):
@@ -219,4 +335,3 @@ async def _no_stream_handler(params, url, headers, topic, websocket):
                     "extra": resp.get("extra")
                 }
             }, websocket)
-

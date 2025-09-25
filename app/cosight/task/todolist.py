@@ -38,6 +38,8 @@ class Plan:
         self.step_notes = {step: "" for step in self.steps}
         self.step_details = {step: "" for step in self.steps}
         self.step_files = {step: "" for step in self.steps}
+        # 存储每个步骤的工具调用信息
+        self.step_tool_calls = {step: [] for step in self.steps}
         # 使用邻接表表示依赖关系
         if dependencies:
             self.dependencies = self._normalize_dependencies(dependencies)
@@ -58,7 +60,7 @@ class Plan:
         返回:
             List[int]: 可立即执行的步骤索引列表（返回所有符合条件的步骤）
         """
-        logger.info(f"get_ready_steps dependencies: {self.dependencies}")
+        logger.debug(f"get_ready_steps dependencies: {self.dependencies}")
         ready_steps = []
         for step_index in range(len(self.steps)):
             # 获取该步骤的所有依赖
@@ -86,6 +88,7 @@ class Plan:
             new_statuses = {}
             new_notes = {}
             new_details = {}
+            new_tool_calls = {}
 
             # First, process all steps in the input order
             for step in steps:
@@ -95,23 +98,27 @@ class Plan:
                     new_statuses[step] = self.step_statuses.get(step)
                     new_notes[step] = self.step_notes.get(step)
                     new_details[step] = self.step_details.get(step)
+                    new_tool_calls[step] = self.step_tool_calls.get(step, [])
                 # If step exists in current steps and is not started, preserve as not_started
                 elif step in self.steps:
                     new_steps.append(step)
                     new_statuses[step] = "not_started"
                     new_notes[step] = self.step_notes.get(step)
                     new_details[step] = self.step_details.get(step)
+                    new_tool_calls[step] = self.step_tool_calls.get(step, [])
                 # If step is new, add as not_started
                 else:
                     new_steps.append(step)
                     new_statuses[step] = "not_started"
                     new_notes[step] = ""
                     new_details[step] = ""
+                    new_tool_calls[step] = []
 
             self.steps = new_steps
             self.step_statuses = new_statuses
             self.step_notes = new_notes
             self.step_details = new_details
+            self.step_tool_calls = new_tool_calls
         logger.info(f"before update dependencies: {self.dependencies}")
         if dependencies:
             self.dependencies.clear()
@@ -152,6 +159,54 @@ class Plan:
                        self.dependencies.get(step_index, [])):
                 raise ValueError(f"Cannot complete step {step_index} before its dependencies are completed")
 
+    def add_tool_call(self, step_index: int, tool_name: str, tool_args: str, tool_result: str = None) -> None:
+        """Add tool call information to a specific step.
+
+        Args:
+            step_index (int): Index of the step (-1 for global/MCP tools)
+            tool_name (str): Name of the tool called
+            tool_args (str): Arguments passed to the tool
+            tool_result (str): Result returned by the tool (deprecated, will be ignored)
+        """
+        # Handle global tools (MCP tools) with step_index = -1
+        if step_index == -1:
+            # Store global tools under a special key
+            global_key = "__global_tools__"
+            if global_key not in self.step_tool_calls:
+                self.step_tool_calls[global_key] = []
+            
+            tool_call_info = {
+                "tool_name": tool_name,
+                "tool_args": tool_args,
+                "tool_result": tool_result,
+                "timestamp": self._get_current_timestamp()
+            }
+            self.step_tool_calls[global_key].append(tool_call_info)
+            logger.info(f"Added global tool call: {tool_name}")
+            return
+        
+        # Handle step-specific tools
+        if step_index < 0 or step_index >= len(self.steps):
+            raise ValueError(f"Invalid step_index: {step_index}. Valid indices range from 0 to {len(self.steps) - 1}.")
+        
+        step = self.steps[step_index]
+        tool_call_info = {
+            "tool_name": tool_name,
+            "tool_args": tool_args,
+            "tool_result": tool_result,
+            "timestamp": self._get_current_timestamp()
+        }
+        
+        if step not in self.step_tool_calls:
+            self.step_tool_calls[step] = []
+        self.step_tool_calls[step].append(tool_call_info)
+        logger.info(f"Added tool call for step {step_index}: {tool_name}")
+
+    def _get_current_timestamp(self) -> str:
+        """Get current timestamp string."""
+        from datetime import datetime
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     def _normalize_dependencies(self, dependencies: Dict[int, List[int]]) -> Dict[int, List[int]]:
         """将可能为 1 基编号的依赖转换为 0 基编号。
 
@@ -177,6 +232,7 @@ class Plan:
         if min(keys) >= 1 and (not values or min(values) >= 1):
             return {k - 1: [d - 1 for d in v] for k, v in deps_int.items()}
         return deps_int
+
 
     def get_progress(self) -> Dict[str, int]:
         """Get progress statistics of the plan."""

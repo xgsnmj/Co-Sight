@@ -16,12 +16,6 @@
 import asyncio
 import traceback
 import os
-from browser_use import Agent
-from browser_use.browser.browser import Browser
-from browser_use.browser.context import BrowserContext
-from langchain_openai import ChatOpenAI
-from browser_use.browser.context import BrowserContextConfig
-from browser_use import BrowserConfig
 from app.common.logger_util import logger
 
 
@@ -56,6 +50,13 @@ class WebToolkit:
             return f"browser_use error: {str(e)}"
 
     async def inner_browser_use(self, task_prompt):
+        from browser_use import Agent
+
+        from browser_use import BrowserConfig
+        from browser_use.browser.browser import Browser
+        from browser_use.browser.context import BrowserContext
+        from langchain_openai import ChatOpenAI
+        from browser_use.browser.context import BrowserContextConfig
         browser = None
         try:
             browser = Browser(

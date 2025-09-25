@@ -69,3 +69,7 @@ llm_for_tool = set_model(tool_model_config)
 vision_model_config = get_vision_model_config()
 logger.info(f"vision_model_config:{vision_model_config}\n")
 llm_for_vision = set_model(vision_model_config)
+
+credibility_model_config = get_credibility_model_config()
+logger.info(f"credibility_model_config:{credibility_model_config}\n")
+llm_for_credibility = set_model(credibility_model_config)

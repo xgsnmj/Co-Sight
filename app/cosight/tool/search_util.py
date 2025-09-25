@@ -21,8 +21,148 @@ import random
 import asyncio
 import aiohttp
 import os
+import ssl
+import urllib3
+import requests
 from app.common.logger_util import logger
 from .scrape_website_toolkit import is_valid_url
+
+# 禁用SSL警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def _resolve_baidu_redirect(session: requests.Session, url: str, timeout: int = 8) -> str:
+    """
+    将百度的跳转链接(http[s]://www.baidu.com/link?url=...)解析为真实目标URL。
+    若解析失败，则返回原始URL。
+    """
+    try:
+        if not url or 'baidu.com/link?url=' not in url:
+            return url
+
+        # 使用GET以兼容部分站点对HEAD的限制；仅获取重定向最终地址
+        resp = session.get(url, allow_redirects=True, timeout=timeout, verify=False)
+        final_url = resp.url or url
+
+        # 避免仍然是百度的中转链接
+        if 'baidu.com/link?url=' in final_url:
+            return url
+        return final_url
+    except Exception:
+        return url
+
+def search_baidu_with_ssl_fix(query: str, num_results: int = 10) -> List[Dict[str, Any]]:
+    """
+    修复SSL问题的百度搜索函数
+    由于百度反爬虫机制，返回模拟搜索结果
+    """
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        
+        # 创建不验证SSL的session
+        session = requests.Session()
+        session.verify = False
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
+        session.headers.update(headers)
+        
+        # 构建搜索URL
+        search_url = f"https://www.baidu.com/s?ie=utf-8&tn=baidu&wd={query}"
+        
+        logger.info(f"Searching Baidu with URL: {search_url}")
+        response = session.get(search_url, timeout=10)
+        response.encoding = 'utf-8'
+        
+        if response.status_code != 200:
+            logger.error(f"Baidu search failed with status code: {response.status_code}")
+            return []
+        
+        
+        # 解析搜索结果
+        soup = BeautifulSoup(response.text, 'html.parser')
+        results = []
+        
+        # 直接查找搜索结果链接 (h3 a 是百度搜索结果的标准结构)
+        result_links = soup.select('h3 a')
+        logger.info(f"Found {len(result_links)} result links")
+        
+        for i, link in enumerate(result_links[:num_results], 1):
+            try:
+                title = link.get_text(strip=True)
+                url = link.get('href', '')
+                
+                # 跳过无效的链接
+                if not title or not url or len(title) < 2:
+                    continue
+                
+                # 处理百度重定向链接为真实目标URL
+                if url.startswith('http://www.baidu.com/link?url=') or url.startswith('https://www.baidu.com/link?url='):
+                    url = _resolve_baidu_redirect(session, url)
+                elif not url.startswith('http'):
+                    # 相对链接，跳过
+                    continue
+                
+                # 查找描述信息 - 在链接的父容器中查找
+                parent = link.parent
+                description = ""
+                if parent:
+                    # 查找描述文本
+                    desc_selectors = [
+                        'span[class*="content"]',
+                        'div[class*="abstract"]', 
+                        'div[class*="desc"]',
+                        'span[class*="desc"]'
+                    ]
+                    for selector in desc_selectors:
+                        desc_elem = parent.find(selector)
+                        if desc_elem:
+                            description = desc_elem.get_text(strip=True)
+                            break
+                    
+                    # 如果没有找到专门的描述元素，尝试获取父容器的文本
+                    if not description:
+                        parent_text = parent.get_text(strip=True)
+                        # 移除标题，获取剩余文本作为描述
+                        if parent_text.startswith(title):
+                            description = parent_text[len(title):].strip()
+                        else:
+                            description = parent_text
+                
+                # 清理描述文本
+                if description:
+                    description = description.replace('\n', ' ').replace('\t', ' ')
+                    # 限制描述长度
+                    if len(description) > 200:
+                        description = description[:200] + "..."
+                
+                results.append({
+                    'title': title,
+                    'url': url,
+                    'abstract': description
+                })
+                
+                logger.info(f"Parsed result {i}: {title[:50]}... -> {url[:120]}...")
+                    
+            except Exception as e:
+                logger.warning(f"Error parsing result item {i}: {e}")
+                continue
+        
+
+        
+        logger.info(f"Successfully parsed {len(results)} results from Baidu")
+        return results
+    except Exception as e:
+        logger.error(f"Baidu search parse error: {e}", exc_info=True)
+        return []
+
 
 async def fetch_url_content(url: str) -> str:
     """Fetch and parse content from a given URL"""
@@ -75,7 +215,7 @@ async def fetch_url_content(url: str) -> str:
 
 
 def search_baidu(
-        query: str
+        query: str, max_results: int = 5
 ) -> List[Dict[str, Any]]:
     logger.info(f'starting search content {query} use baidu')
     """Use Baidu search engine to search information for the given query.
@@ -97,7 +237,8 @@ def search_baidu(
 
     for attempt in range(max_retries):
         try:
-            results = search(query)
+            # 使用SSL修复版本的搜索函数
+            results = search_baidu_with_ssl_fix(query, max_results)
             # Limit results to max_results
             results = results
 

@@ -17,6 +17,8 @@ import asyncio
 import json
 import httpx
 from typing import Optional, List
+
+from httpx import ReadTimeout
 from lagent.actions.bing_browser import DuckDuckGoSearch
 from app.cosight.tool.deep_search.common.entity import SearchSource
 from config.config import get_tavily_config
@@ -104,6 +106,10 @@ class TavilySearch(DuckDuckGoSearch):
                     'content': result,
                     'images': response_data.get('images', [])
                 }
+        except httpx.TimeoutException as e:
+            logger.error(
+                f"Tavily HTTP请求超时: {str(e)}", exc_info=True)
+            return []
         except httpx.HTTPError as e:
             logger.error(
                 f"Tavily HTTP请求失败: {str(e)}, 状态码: {getattr(e.response, 'status_code', 'N/A')}, 响应内容: {getattr(e.response, 'text', 'N/A')}", exc_info=True)

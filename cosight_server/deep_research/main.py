@@ -200,7 +200,7 @@ if web_dir:
     logger.info(f"web dir is >>>>>> {web_dir}")
     # 在根路径挂载web目录
     app.mount(f"/cosight", StaticFiles(directory=web_dir, html=True), name="web")
-    logger.info(f"前端静态文件已挂载到: /web")
+    logger.info(f"前端静态文件已挂载到: /cosight")
 
 app.include_router(userRouter, prefix=str(custom_config.get("base_api_url")))
 app.include_router(searchRouter, prefix=str(custom_config.get("base_api_url")))
@@ -233,4 +233,5 @@ if __name__ == '__main__':
     logger.info('cosight server staring...')
     args.port = custom_config.get("search_port")
 
-    uvicorn.run(app=app, host="0.0.0.0", port=int(args.port))
+    # 提高WebSocket最大消息大小（默认16MB），这里设置为128MB
+    uvicorn.run(app=app, host="0.0.0.0", port=int(args.port), ws_max_size=256 * 1024 * 1024)

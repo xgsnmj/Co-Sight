@@ -133,6 +133,30 @@ def get_vision_model_config() -> dict[str, Optional[str | int | float]]:
     }
 
 
+# ========== 可信信息分析大模型配置 ==========
+def get_credibility_model_config() -> dict[str, Optional[str | int | float]]:
+    """获取可信信息分析专用API配置，如果缺少配置则退回默认"""
+    credibility_api_key = os.environ.get("CREDIBILITY_API_KEY")
+    credibility_base_url = os.environ.get("CREDIBILITY_API_BASE_URL")
+    model_name = os.environ.get("CREDIBILITY_MODEL_NAME")
+
+    # 检查三个字段是否都存在且非空
+    if not (credibility_api_key and credibility_base_url and model_name):
+        return get_model_config()
+
+    max_tokens = os.environ.get("CREDIBILITY_MAX_TOKENS")
+    temperature = os.environ.get("CREDIBILITY_TEMPERATURE")
+
+    return {
+        "api_key": credibility_api_key,
+        "base_url": credibility_base_url,
+        "model": model_name,
+        "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
+        "temperature": float(temperature) if temperature and temperature.strip() else None,
+        "proxy": os.environ.get("CREDIBILITY_PROXY")
+    }
+
+
 # ========== 工具配置 ==========
 def get_tavily_config() -> Optional[str]:
     """获取tavily兼容API配置"""

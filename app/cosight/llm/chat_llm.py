@@ -18,7 +18,6 @@ from json import JSONDecodeError
 
 from typing import List, Dict, Any
 
-from jupyter_server.auth import passwd
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
 

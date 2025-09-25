@@ -17,35 +17,71 @@ from threading import Lock
 from typing import Callable, Dict, List, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 
-
+from app.cosight.task.task_manager import TaskManager
 from app.cosight.task.todolist import Plan
 from app.common.logger_util import logger
 
 
 class EventManager:
     def __init__(self):
-        self._subscribers: Dict[str, List[Callable]] = {}  # 简化为直接存储回调函数列表
+        # 结构: {event_type: {plan_id: [callbacks]}}
+        self._subscribers: Dict[str, Dict[str, List[Callable]]] = {}
         self._lock = Lock()
         self._executor = ThreadPoolExecutor()
 
-    def subscribe(self, event_type: str, callback: Callable[[Any], None]):
-        """订阅事件"""
+    def subscribe(self, event_type: str, plan_id: str, callback: Callable):
+        """订阅事件，关联计划ID"""
         with self._lock:
-            self._subscribers.setdefault(event_type, []).append(callback)
+            if event_type not in self._subscribers:
+                self._subscribers[event_type] = {}
+            self._subscribers[event_type].setdefault(plan_id, []).append(callback)
 
-    def publish(self, event_type: str, plan: Optional[Plan] = None):
-        """发布事件"""
+    def publish(self, event_type: str, plan_or_plan_id=None, event_data=None):
+        """发布事件 - 支持Plan对象和工具事件数据"""
+        # 处理工具事件的特殊情况
+        if event_type == "tool_event" and isinstance(plan_or_plan_id, str) and event_data is not None:
+            plan_id = plan_or_plan_id
+            callbacks = []
+            with self._lock:
+                if event_type in self._subscribers and plan_id in self._subscribers[event_type]:
+                    callbacks = self._subscribers[event_type][plan_id].copy()
+
+            for callback in callbacks:
+                self._executor.submit(self._safe_callback, callback, event_data)
+            return
+        
+        # 原有的Plan对象处理逻辑
+        plan = plan_or_plan_id
+        if plan is None:
+            return
+
+        # 通过TaskManager获取plan_id
+        plan_id = TaskManager.get_plan_id(plan)
+        if not plan_id:
+            logger.warning(f"无法找到plan对象的ID: {plan}")
+            return
+
         callbacks = []
         with self._lock:
-            if event_type in self._subscribers:
-                callbacks = self._subscribers[event_type].copy()
+            if event_type in self._subscribers and plan_id in self._subscribers[event_type]:
+                callbacks = self._subscribers[event_type][plan_id].copy()
 
         for callback in callbacks:
             self._executor.submit(self._safe_callback, callback, plan)
 
-    def _safe_callback(self, callback: Callable, plan: Optional[Plan]):
+    def unsubscribe(self, event_type: str, plan_id: str, callback: Callable):
+        """取消订阅特定计划ID的事件"""
+        with self._lock:
+            if (event_type in self._subscribers and
+                    plan_id in self._subscribers[event_type]):
+                try:
+                    self._subscribers[event_type][plan_id].remove(callback)
+                except ValueError:
+                    pass
+
+    def _safe_callback(self, callback: Callable, data):
         try:
-            callback(plan)
+            callback(data)
         except Exception as e:
             logger.error(f"Callback failed: {str(e)}", exc_info=True)
 
