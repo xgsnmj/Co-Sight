@@ -26,6 +26,7 @@ from app.common.logger_util import logger
 folder_files_map: Dict[str, List[str]] = {}
 subfolder_files_map: Dict[str, List[str]] = {}
 
+
 class Plan:
     """Represents a single plan with steps, statuses, and execution details as a DAG."""
 
@@ -39,7 +40,7 @@ class Plan:
         self.step_files = {step: "" for step in self.steps}
         # 使用邻接表表示依赖关系
         if dependencies:
-            self.dependencies = dependencies
+            self.dependencies = self._normalize_dependencies(dependencies)
         else:
             self.dependencies = {i: [i - 1] for i in range(1, len(self.steps))} if len(self.steps) > 1 else {}
         self.result = ""
@@ -64,7 +65,7 @@ class Plan:
             dependencies = self.dependencies.get(step_index, [])
 
             # 检查所有依赖是否都已完成
-            if all(self.step_statuses.get(self.steps[int(dep)]) != "not_started" for dep in dependencies):
+            if all(self.step_statuses.get(self.steps[int(dep)]) not  in["not_started","in_progress"]  for dep in dependencies):
                 # 检查步骤本身是否未开始
                 if self.step_statuses.get(self.steps[step_index]) == "not_started":
                     ready_steps.append(step_index)
@@ -114,7 +115,7 @@ class Plan:
         logger.info(f"before update dependencies: {self.dependencies}")
         if dependencies:
             self.dependencies.clear()
-            dependencies = {int(k): v for k, v in dependencies.items()}
+            dependencies = self._normalize_dependencies(dependencies)
             self.dependencies.update(dependencies)
         else:
             self.dependencies = {i: [i - 1] for i in range(1, len(steps))} if len(steps) > 1 else {}
@@ -150,6 +151,32 @@ class Plan:
             if not all(self.step_statuses[self.steps[int(dep)]] == "completed" for dep in
                        self.dependencies.get(step_index, [])):
                 raise ValueError(f"Cannot complete step {step_index} before its dependencies are completed")
+
+    def _normalize_dependencies(self, dependencies: Dict[int, List[int]]) -> Dict[int, List[int]]:
+        """将可能为 1 基编号的依赖转换为 0 基编号。
+
+        处理要点：
+        - 接受 JSON 传入时的字符串 key，统一转 int
+        - 判断是否需要整体减 1：若 keys 与其值均不包含 0，且最小值 >= 1，则视为 1 基编号
+        - 仅在满足上述条件时进行转换，否则原样返回
+        """
+        try:
+            deps_int: Dict[int, List[int]] = {int(k): v for k, v in dependencies.items()}
+        except Exception:
+            deps_int = dependencies  # 已经是 int key
+        # 统一将值也转为 int
+        deps_int = {k: [int(d) for d in v] for k, v in deps_int.items()}
+        if not deps_int:
+            return deps_int
+        keys = list(deps_int.keys())
+        values = [d for v in deps_int.values() for d in v]
+        # 若已包含 0，则认为是 0 基编号
+        if 0 in keys or any(d == 0 for d in values):
+            return deps_int
+        # 若最小 key 和所有依赖值都 >=1，则视为 1 基编号，整体减 1
+        if min(keys) >= 1 and (not values or min(values) >= 1):
+            return {k - 1: [d - 1 for d in v] for k, v in deps_int.items()}
+        return deps_int
 
     def get_progress(self) -> Dict[str, int]:
         """Get progress statistics of the plan."""
