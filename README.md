@@ -1,13 +1,13 @@
 
-## ? Still worried about the invitation code? One-click deployment of Co-Sight to quickly build your own Manus-like system!
+## ğŸš€ Still worried about the invitation code? One-click deployment of Co-Sight to quickly build your own Manus-like system!
 
-[![¼òÌåÖĞÎÄ](https://img.shields.io/badge/¼òÌåÖĞÎÄ-µã»÷²é¿´-orange)](README-zh.md)
+[![ç®€ä½“ä¸­æ–‡](https://img.shields.io/badge/ç®€ä½“ä¸­æ–‡-ç‚¹å‡»æŸ¥çœ‹-orange)](README-zh.md)
 
 Since the release of Manus, some closed-source platforms have faced problems such as high cost, limited access, and difficulty in privatization deployment, although they have excellent user experience and commercial support. Although open source frameworks have higher flexibility and transparency, they are slightly lacking in terms of functional integrity, style richness, and stability.
 
 **Co-Sight** Committed to striking the best balance between cost, quality, stability and ease of use. It supports low-cost large models to generate high-quality and beautiful reports comparable to Claude models, and can be flexibly deployed in private environments, helping enterprises and individuals quickly build their own Manus-like systems.
 
-## ?Sample Demo
+## ğŸ”Sample Demo
 
 | Scene                 | Example links                                                                 | Preview of the effect                           |
 |-----------------------|-------------------------------------------------------------------------------|-------------------------------------------------|
@@ -18,14 +18,14 @@ Since the release of Manus, some closed-source platforms have faced problems suc
 
 **We welcome you to contribute more examples in the Lab to enrich our case library!**  
 
-GitHub Address£º[https://github.com/Co-Sight-Series/Co-Sight-Lab](https://github.com/Co-Sight-Series/Co-Sight-Lab)
+GitHub Addressï¼š[https://github.com/Co-Sight-Series/Co-Sight-Lab](https://github.com/Co-Sight-Series/Co-Sight-Lab)
 
-## ?Installation Guide
+## ğŸ› Installation Guide
 
-1. **Download the project**£ºYou can choose one of the following methods to download the project to your local computer£º
+1. **Download the project**ï¼šYou can choose one of the following methods to download the project to your local computerï¼š
    
    **1. Use Git clone**
-   Visit https://github.com/ZTE-AICloud/Co-Sight £¬Click on the green 'Code' button,
+   Visit https://github.com/ZTE-AICloud/Co-Sight ï¼ŒClick on the green 'Code' button,
 
    ```bash
    # 1. Select HTTP protocol
@@ -38,36 +38,36 @@ GitHub Address£º[https://github.com/Co-Sight-Series/Co-Sight-Lab](https://github
    ```
 
    **2. Download the zip file**
-   Visit https://github.com/ZTE-AICloud/Co-Sight £¬ Click on the green 'Code' button, select 'Download ZIP', download it and unzip it to enter the project directory.
+   Visit https://github.com/ZTE-AICloud/Co-Sight ï¼Œ Click on the green 'Code' button, select 'Download ZIP', download it and unzip it to enter the project directory.
 
-2. **Prepare the environment**£ºpython version >= 3.11
+2. **Prepare the environment**ï¼špython version >= 3.11
   
-3. **Install dependencies**£º  Run the following command in the project directory to install dependencies:
+3. **Install dependencies**ï¼š  Run the following command in the project directory to install dependencies:
 ```shell
 pip install -r requirements.txt
 ```
 
-## ??Configuration
+## âš™ï¸Configuration
 
-1. **Copy the template`.env_template`and generated `.env`**£¨the document has been joined `.gitignore`£¬securely store private information£©£º
-2. **edit** `.env` **configure core parameters**£º
+1. **Copy the template`.env_template`and generated `.env`**ï¼ˆthe document has been joined `.gitignore`ï¼Œsecurely store private informationï¼‰ï¼š
+2. **edit** `.env` **configure core parameters**ï¼š
 	1. Large model configuration: Configure the corresponding large model address, model name, API-KEY, etc., and further (optionally) configure the planning, execution, tools, and multi-modal model;
 	2. Search engine configuration (optional): configure the API-KEY of the relevant search engine;
-		1. Google Search how to apply£ºhttps://developers.google.com/custom-search/v1/overview?hl=zh-cn#api_key
+		1. Google Search how to applyï¼šhttps://developers.google.com/custom-search/v1/overview?hl=zh-cn#api_key
 		   ![](assets/Pasted_image_20250916105315.png)	
-		2. Tavily Search how to apply£ºhttps://app.tavily.com/home
+		2. Tavily Search how to applyï¼šhttps://app.tavily.com/home
 		   ![](assets/Pasted_image_20250502115315.png)
 3. **Configure MCP tool**
 ```python
-# ÔÚ¹¤³Ì¸ùÂ·¾¶ÏÂµÄconfig/mcp_server_config.json°´ĞèÅäÖÃÈçÏÂĞÅÏ¢,Ö§³ÖÅäÖÃ¶à¸ö
+# åœ¨å·¥ç¨‹æ ¹è·¯å¾„ä¸‹çš„config/mcp_server_config.jsonæŒ‰éœ€é…ç½®å¦‚ä¸‹ä¿¡æ¯,æ”¯æŒé…ç½®å¤šä¸ª
 [
   {
-    "skill_name": "MCP¼¼ÄÜÃû³Æ",
+    "skill_name": "MCPæŠ€èƒ½åç§°",
     "skill_type": "local_mcp",
-    "display_name_zh": "MCP¹¤¾ßÖĞÎÄÃû³Æ",
-    "display_name_en": "MCP¹¤¾ßÓ¢ÎÄÃû³Æ",
-    "description_zh": "MCP¹¤¾ßÖĞÎÄÃèÊö",
-    "description_en": "MCP¹¤¾ßÖĞÎÄÃèÊö",
+    "display_name_zh": "MCPå·¥å…·ä¸­æ–‡åç§°",
+    "display_name_en": "MCPå·¥å…·è‹±æ–‡åç§°",
+    "description_zh": "MCPå·¥å…·ä¸­æ–‡æè¿°",
+    "description_en": "MCPå·¥å…·ä¸­æ–‡æè¿°",
     "mcp_server_config": {
       "command": "python",
       "args": [
@@ -78,9 +78,9 @@ pip install -r requirements.txt
 ]
 ```
 		  
-## ?? Quick Start
+## â–¶ï¸ Quick Start
 
-1. **start the service**£ºcosight_server/deep_research/main.py
+1. **start the service**ï¼šcosight_server/deep_research/main.py
 ![](./assets/Pasted_image_20250430225822.png)
 2. **open your browser and visit**
 `http://localhost:7788/cosight/`
@@ -89,7 +89,7 @@ pip install -r requirements.txt
 ![](assets/Pasted_image_20250501020936.png)
 
 
-## ? Use Docker
+## ğŸ³ Use Docker
 
 1. download the docker offline image
 https://github.com/ZTE-AICloud/Co-Sight/releases/download/v0.0.1/co-sight-v001.tar
@@ -109,7 +109,7 @@ docker restart ac39023b3b3fdc3245ec1cc0293afb6b0a5efd4675ee79535ed6663c3e2a2558
 3. **open your browser and visit**
 `http://localhost:7788/cosight/`
 
-## ? Resource Requirements
+## ğŸ“£ Resource Requirements
 - **CPU**: 4 cores  
 - **Memory**: 4GB  
 - **Disk**: 1GB  
@@ -120,7 +120,7 @@ docker restart ac39023b3b3fdc3245ec1cc0293afb6b0a5efd4675ee79535ed6663c3e2a2558
 
 This configuration ensures basic system operation and successful dependency installation for stable performance.
 
-## ? Contribution Guidelines
+## ğŸ¤ Contribution Guidelines
 
 PRs and Issues are very welcome! If you have any ideas or suggestions:
 
