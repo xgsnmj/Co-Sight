@@ -83,7 +83,7 @@ class ToolResultProcessor:
                 return ToolResultProcessor._process_search_result(tool_name, tool_args, tool_result)
             elif tool_name == 'execute_code':
                 return ToolResultProcessor._process_code_result(tool_name, tool_args, tool_result)
-            elif tool_name in ['file_saver', 'file_read', 'file_str_replace', 'file_find_in_content']:
+            elif tool_name in ['file_saver', 'file_read', 'file_str_replace', 'file_find_in_content','create_html_report']:
                 return ToolResultProcessor._process_file_result(tool_name, tool_args, tool_result)
             elif tool_name == 'browser_use':
                 return ToolResultProcessor._process_web_result(tool_name, tool_args, tool_result)

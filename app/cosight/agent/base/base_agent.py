@@ -233,6 +233,7 @@ class BaseAgent:
             "tavily_search": "Tavily搜索",
             "search_wiki": "维基百科搜索",
             "image_search": "图片搜索",
+            "audio_recognition": "音频识别",
             
             # 文件操作类工具
             "file_saver": "保存文件",
@@ -243,9 +244,12 @@ class BaseAgent:
             "file_list": "列出文件",
             "file_copy": "复制文件",
             "file_move": "移动文件",
+            "file_str_replace": "文件内容替换",
+            "file_find_in_content": "文件内容查找",
             
             # 代码执行类工具
-            "code_executor": "代码执行器",
+            # "code_executor": "代码执行器",
+            "execute_code": "代码执行器",
             "python_executor": "Python执行器",
             "shell_executor": "Shell执行器",
             
@@ -255,6 +259,8 @@ class BaseAgent:
             "web_click": "网页点击",
             "web_input": "网页输入",
             "web_screenshot": "网页截图",
+            "browser_use": "浏览器操作",
+            "fetch_website_content": "抓取网页内容",
             
             # 图像分析类工具
             "image_analyzer": "图像分析",
@@ -266,10 +272,12 @@ class BaseAgent:
             "video_extract": "视频提取",
             
             # 文档处理类工具
+            "create_html_report": "创建HTML报告",
             "document_processor": "文档处理",
             "pdf_reader": "PDF阅读器",
             "word_processor": "Word处理",
             "excel_processor": "Excel处理",
+            "extract_document_content": "抽取文档内容",
             
             # 数据库类工具
             "database_query": "数据库查询",
@@ -429,9 +437,31 @@ class BaseAgent:
         self._push_tool_event("tool_start", function_name, function_args, step_index=step_index)
         
         try:
-            # Clean and validate JSON
-            cleaned_args = function_args.replace('\\\'', '\'')
-            args_dict = json.loads(cleaned_args or "{}")
+            # Robust JSON arg parsing: tolerate code fences/None/empty/single quotes/trailing commas
+            cleaned_args = function_args if function_args is not None else "{}"
+            if isinstance(cleaned_args, bytes):
+                cleaned_args = cleaned_args.decode('utf-8', errors='ignore')
+            cleaned_args = str(cleaned_args).strip()
+            # strip markdown fences
+            if cleaned_args.startswith("```"):
+                tmp = cleaned_args.strip('`')
+                if "\n" in tmp:
+                    tmp = tmp.split("\n", 1)[1]
+                cleaned_args = tmp.strip()
+                if cleaned_args.endswith("```"):
+                    cleaned_args = cleaned_args[:-3]
+            if cleaned_args == "" or cleaned_args.lower() in ("null", "none"):
+                cleaned_args = "{}"
+            try:
+                args_dict = json.loads(cleaned_args)
+            except Exception:
+                repaired = cleaned_args.replace("'", '"').rstrip(',').strip()
+                if repaired and not (repaired.startswith('{') or repaired.startswith('[')):
+                    repaired = '{' + repaired + '}'
+                try:
+                    args_dict = json.loads(repaired)
+                except Exception:
+                    args_dict = {}
 
             if step_index is not None and 'step_index' not in args_dict and function_name in ['mark_step']:
                 args_dict['step_index'] = step_index

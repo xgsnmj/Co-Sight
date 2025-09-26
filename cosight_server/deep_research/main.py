@@ -233,5 +233,5 @@ if __name__ == '__main__':
     logger.info('cosight server staring...')
     args.port = custom_config.get("search_port")
 
-    # 提高WebSocket最大消息大小（默认16MB），这里设置为128MB
+    # 提高WebSocket最大消息大小（默认16MB），这里设置为256MB
     uvicorn.run(app=app, host="0.0.0.0", port=int(args.port), ws_max_size=256 * 1024 * 1024)
