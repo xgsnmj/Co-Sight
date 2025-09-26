@@ -316,7 +316,7 @@ class MessageService {
                     path = buildApiWorkspacePath(args.file_path);
                     const filename = extractFileName(args.file_path);
                     if (filename) {
-                        descriptionOverride = `信息保存到:${filename}`;
+                        descriptionOverride = (window.I18nService ? `${window.I18nService.t('info_saved_to')}${filename}` : `信息保存到:${filename}`);
                     }
                 }
             } catch (e) {
@@ -347,7 +347,7 @@ class MessageService {
         let resultText = '';
         if (toolCallRecord.status === 'running') {
             // 运行中状态的描述
-            resultText = toolCallRecord.start_event?.status_text || '正在执行中...';
+            resultText = toolCallRecord.start_event?.status_text || (window.I18nService ? window.I18nService.t('running') : '正在执行中...');
         } else if (toolCallRecord.tool_result) {
             if (typeof toolCallRecord.tool_result === 'string') {
                 resultText = toolCallRecord.tool_result;
@@ -367,13 +367,13 @@ class MessageService {
         // 根据状态生成合适的描述
         let statusDescription = '';
         if (toolCallRecord.status === 'running') {
-            statusDescription = `正在执行: ${getToolDisplayName(toolCallRecord.tool_name)}`;
+            statusDescription = (window.I18nService ? `${window.I18nService.t('executing')}${getToolDisplayName(toolCallRecord.tool_name)}` : `正在执行: ${getToolDisplayName(toolCallRecord.tool_name)}`);
         } else if (toolCallRecord.status === 'completed') {
-            statusDescription = `执行完成: ${getToolDisplayName(toolCallRecord.tool_name)}`;
+            statusDescription = (window.I18nService ? `${window.I18nService.t('execution_completed')}${getToolDisplayName(toolCallRecord.tool_name)}` : `执行完成: ${getToolDisplayName(toolCallRecord.tool_name)}`);
         } else if (toolCallRecord.status === 'failed') {
-            statusDescription = `执行失败: ${getToolDisplayName(toolCallRecord.tool_name)}`;
+            statusDescription = (window.I18nService ? `${window.I18nService.t('execution_failed')}${getToolDisplayName(toolCallRecord.tool_name)}` : `执行失败: ${getToolDisplayName(toolCallRecord.tool_name)}`);
         } else {
-            statusDescription = `执行工具: ${getToolDisplayName(toolCallRecord.tool_name)}`;
+            statusDescription = (window.I18nService ? `${window.I18nService.t('execute_tool')}${getToolDisplayName(toolCallRecord.tool_name)}` : `执行工具: ${getToolDisplayName(toolCallRecord.tool_name)}`);
         }
 
         return {
@@ -387,7 +387,7 @@ class MessageService {
             startTime: Date.now() - (toolCallRecord.duration || 0) * 1000,
             endTime: toolCallRecord.status === 'running' ? null : Date.now(),
             result: resultText,
-            error: toolCallRecord.status === 'failed' ? '工具执行失败' : null,
+            error: toolCallRecord.status === 'failed' ? (window.I18nService ? window.I18nService.t('tool_execution_failed') : '工具执行失败') : null,
             url: url,
             path: path,
             timestamp: toolCallRecord.timestamp

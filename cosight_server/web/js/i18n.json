@@ -35,6 +35,11 @@
     "loading_file": "正在加载文件...",
     "processing": "正在处理...",
     "task_steps_list": "任务步骤列表",
+    "executing": "正在执行: ",
+    "execution_completed": "执行完成: ",
+    "execution_failed": "执行失败: ",
+    "running": "正在执行中...",
+    "tool_execution_failed": "工具执行失败",
     "baidu_search": "百度搜索",
     "google_search": "谷歌搜索",
     "image_search": "图片搜索",
@@ -46,7 +51,12 @@
     "create_plan": "创建计划",
     "fetch_website_content": "获取网页内容",
     "tavily_search": "Tavily搜索",
-    "click_to_view_details": "点击查看详情"
+    "click_to_view_details": "点击查看详情",
+    "viewing_credibility_info": "正在查看节点 {nodeId} 的可信分级信息...",
+    "no_credibility_info": "暂无可信分级信息",
+    "no_credibility_info_desc": "节点 {nodeId} 目前没有可信分级数据",
+    "data_anomaly": "数据异常",
+    "data_anomaly_desc": "节点 {nodeId} 的可信分级数据格式异常"
   },
   "en": {
     "app_title": "Co-Sight Super Agent",
@@ -84,6 +94,11 @@
     "loading_file": "Loading file...",
     "processing": "Processing...",
     "task_steps_list": "Task Steps",
+    "executing": "Executing: ",
+    "execution_completed": "Completed: ",
+    "execution_failed": "Failed: ",
+    "running": "Running...",
+    "tool_execution_failed": "Tool execution failed",
     "baidu_search": "Baidu Search",
     "google_search": "Google Search",
     "image_search": "Image Search",
@@ -95,6 +110,11 @@
     "create_plan": "Create Plan",
     "fetch_website_content": "Fetch Website Content",
     "tavily_search": "Tavily Search",
-    "click_to_view_details": "Click to view details"
+    "click_to_view_details": "Click to view details",
+    "viewing_credibility_info": "Viewing credibility info for node {nodeId}...",
+    "no_credibility_info": "No credibility info",
+    "no_credibility_info_desc": "Node {nodeId} currently has no credibility data",
+    "data_anomaly": "Data anomaly",
+    "data_anomaly_desc": "Credibility data format is abnormal for node {nodeId}"
   }
 }

@@ -166,7 +166,7 @@ class CredibilityService {
         const rightStatus = document.getElementById('right-container-status');
         // 更新右侧面板状态
         if (rightStatus) {
-            rightStatus.textContent = `正在查看节点 ${nodeId} 的可信分级信息...`;
+            rightStatus.textContent = (window.I18nService ? window.I18nService.t('viewing_credibility_info').replace('{nodeId}', nodeId) : `正在查看节点 ${nodeId} 的可信分级信息...`);
         }
 
         // 检查是否存在可信分级信息
@@ -174,8 +174,8 @@ class CredibilityService {
             rightContent.innerHTML = `
                 <div style="text-align: center; color: #999; padding: 40px 20px;">
                     <i class="fas fa-info-circle" style="font-size: 48px; margin-bottom: 16px; color: #ccc;"></i>
-                    <h3 style="color: #666; margin-bottom: 8px;">暂无可信分级信息</h3>
-                    <p style="color: #999;">节点 ${nodeId} 目前没有可信分级数据</p>
+                    <h3 style="color: #666; margin-bottom: 8px;">${(window.I18nService ? window.I18nService.t('no_credibility_info') : '暂无可信分级信息')}</h3>
+                    <p style="color: #999;">${(window.I18nService ? window.I18nService.t('no_credibility_info_desc').replace('{nodeId}', nodeId) : `节点 ${nodeId} 目前没有可信分级数据`)}</p>
                 </div>
             `;
             return;
@@ -187,8 +187,8 @@ class CredibilityService {
             rightContent.innerHTML = `
                 <div style="text-align: center; color: #999; padding: 40px 20px;">
                     <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 16px; color: #ff9800;"></i>
-                    <h3 style="color: #666; margin-bottom: 8px;">数据异常</h3>
-                    <p style="color: #999;">节点 ${nodeId} 的可信分级数据格式异常</p>
+                    <h3 style="color: #666; margin-bottom: 8px;">${(window.I18nService ? window.I18nService.t('data_anomaly') : '数据异常')}</h3>
+                    <p style="color: #999;">${(window.I18nService ? window.I18nService.t('data_anomaly_desc').replace('{nodeId}', nodeId) : `节点 ${nodeId} 的可信分级数据格式异常`)}</p>
                 </div>
             `;
             return;

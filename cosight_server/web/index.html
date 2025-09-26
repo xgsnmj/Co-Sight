@@ -48,22 +48,22 @@
                     <div class="progress-stats">
                         <div class="stat-item" style="color: #4CAF50;">
                             <div class="stat-number" id="completed-count">0</div>
-                            <div class="stat-label">已完成</div>
+                            <div class="stat-label" data-i18n="completed">已完成</div>
                             <div class="step-list" id="completed-steps"></div>
                         </div>
                         <div class="stat-item" style="color: #FF9800;">
                             <div class="stat-number" id="in-progress-count">0</div>
-                            <div class="stat-label">进行中</div>
+                            <div class="stat-label" data-i18n="in_progress">进行中</div>
                             <div class="step-list" id="in-progress-steps"></div>
                         </div>
                         <div class="stat-item" style="color: #f44336;">
                             <div class="stat-number" id="blocked-count">0</div>
-                            <div class="stat-label">阻塞</div>
+                            <div class="stat-label" data-i18n="blocked">阻塞</div>
                             <div class="step-list" id="blocked-steps"></div>
                         </div>
                         <div class="stat-item" style="color: #9E9E9E;">
                             <div class="stat-number" id="not-started-count">6</div>
-                            <div class="stat-label">未开始</div>
+                            <div class="stat-label" data-i18n="not_started">未开始</div>
                             <div class="step-list" id="not-started-steps"></div>
                         </div>
                     </div>
@@ -185,7 +185,7 @@
     <div class="steps-tooltip" id="steps-tooltip"></div>
     <div class="verification-tooltip" id="verification-tooltip"></div>
 
-    <script src="data/data.js"></script>
+    <!-- 国际化服务脚本 --><script src="js/i18n.js"></script><script src="data/data.js"></script>
     <script src="js/websocket.js"></script>
     <script src="js/message.js"></script>
     <script src="js/steps.js"></script>
