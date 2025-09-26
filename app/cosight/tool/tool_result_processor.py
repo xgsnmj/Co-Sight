@@ -87,6 +87,8 @@ class ToolResultProcessor:
                 return ToolResultProcessor._process_file_result(tool_name, tool_args, tool_result)
             elif tool_name == 'browser_use':
                 return ToolResultProcessor._process_web_result(tool_name, tool_args, tool_result)
+            elif tool_name == 'fetch_website_content':
+                return ToolResultProcessor._process_website_content_result(tool_name, tool_args, tool_result)
             elif tool_name in ['ask_question_about_image', 'ask_question_about_video']:
                 return ToolResultProcessor._process_image_result(tool_name, tool_args, tool_result)
             else:
@@ -294,6 +296,72 @@ class ToolResultProcessor:
                 "error": str(e)
             }
     
+    @staticmethod
+    def _process_website_content_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+        """处理网站内容抓取结果"""
+        try:
+            # 提取URL
+            url = "未知URL"
+            if tool_args:
+                try:
+                    # 尝试解析JSON格式的tool_args
+                    parsed_args = json.loads(tool_args)
+                    if isinstance(parsed_args, dict) and 'website_url' in parsed_args:
+                        url = parsed_args['website_url']
+                except json.JSONDecodeError:
+                    # 如果不是JSON格式，直接使用tool_args作为URL
+                    url = tool_args
+            
+            # # 检查是否有错误
+            is_error =  "fetch_website_content error" in tool_result
+            
+            # 计算内容长度
+            content_length = len(tool_result)
+            
+            # 提取内容摘要（前200个字符）
+            content_preview = tool_result[:200] + "..." if len(tool_result) > 200 else tool_result
+            
+            # 统计行数和段落数
+            lines = tool_result.split('\n')
+            line_count = len([line for line in lines if line.strip()])
+            paragraph_count = len([p for p in tool_result.split('\n\n') if p.strip()])
+            
+            # 提取可能的标题（以大写字母开头且长度适中的行）
+            potential_titles = []
+            for line in lines[:10]:  # 只检查前10行
+                line = line.strip()
+                if (len(line) > 10 and len(line) < 100 and 
+                    line[0].isupper() and not line.endswith('.') and 
+                    not line.startswith('http')):
+                    potential_titles.append(line)
+            
+            summary = f"网站内容抓取{'成功' if not is_error else '失败'}，内容长度: {content_length} 字符"
+            if is_error:
+                summary += f"，错误信息: {tool_result}"
+            
+            return {
+                "tool_type": "website_content",
+                "summary": summary,
+                "operation": "网站内容抓取",
+                "url": url,
+                "content_length": content_length,
+                "line_count": line_count,
+                "paragraph_count": paragraph_count,
+                "content_preview": content_preview,
+                "potential_titles": potential_titles[:3],  # 最多返回3个可能的标题
+                "is_success": not is_error,
+                "has_content": content_length > 0 and not is_error
+            }
+        except Exception as e:
+            logger.error(f"Error processing website content result: {e}")
+            return {
+                "tool_type": "website_content",
+                "summary": "网站内容抓取完成",
+                "operation": "网站内容抓取",
+                "error": str(e),
+                "is_success": False
+            }
+
     @staticmethod
     def _process_image_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
         """处理图像分析结果"""

@@ -555,7 +555,8 @@ body {
 
 .node-circle.in_progress {
     fill: #ff9800;
-    animation: nodeGlowPulse 2.5s infinite;
+    animation: nodeSizePulse 2.5s infinite;
+    transform-origin: center;
 }
 
 .node-circle.blocked {
@@ -573,6 +574,16 @@ body {
     dominant-baseline: central;
     fill: white;
     pointer-events: none;
+}
+
+/* 为进行中的节点文本添加动画 */
+.node.in_progress .node-text {
+    font-weight: 900;
+}
+
+/* 为进行中的节点状态图标添加动画 */
+.node.in_progress .status-icon {
+    font-weight: 900;
 }
 
 .edge {
@@ -1336,19 +1347,16 @@ body {
     }
 }
 
-/* SVG节点光晕脉冲动画 */
-@keyframes nodeGlowPulse {
+
+@keyframes nodeSizePulse {
     0% {
-        filter: drop-shadow(0 0 2px rgba(255, 152, 0, 0.4));
-        opacity: 1;
+        r: 25;
     }
     50% {
-        filter: drop-shadow(0 0 5px rgba(255, 152, 0, 0.6)) drop-shadow(0 0 8px rgba(255, 152, 0, 0.3));
-        opacity: 0.95;
+        r: 30;
     }
     100% {
-        filter: drop-shadow(0 0 2px rgba(255, 152, 0, 0.4));
-        opacity: 1;
+        r: 25;
     }
 }
 
