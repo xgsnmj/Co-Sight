@@ -98,7 +98,7 @@ function showTooltip(event, d, showStatus = true) {
         finalY = event.pageY - tooltipHeight - 10;
     }
 
-    const status = showStatus ? `<em>状态: ${getStatusText(d.status)}</em><br/>` : '';
+    const status = showStatus ? `<em>${(window.I18nService ? window.I18nService.t('status') : '状态')}: ${getStatusText(d.status)}</em><br/>` : '';
     tooltip
         .style("opacity", 0)
         .style("left", finalX + "px")
@@ -126,7 +126,7 @@ function hideTooltip() {
 
 // 获取状态文本
 function getStatusText(status) {
-    return statusTexts[status] || "未知";
+    return statusTexts[status] || (window.I18nService ? window.I18nService.t('unknown') : '未知');
 }
 
 // 根据节点ID获取对应的工作流程数据
@@ -165,7 +165,7 @@ function getWorkflowByNodeId(nodeId) {
                             path = buildApiWorkspacePath(args.file_path);
                             const filename = extractFileName(args.file_path);
                             if (filename) {
-                                descriptionOverride = `信息保存到:${filename}`;
+                                descriptionOverride = (window.I18nService ? `${window.I18nService.t('info_saved_to')}${filename}` : `信息保存到:${filename}`);
                             }
                         }
                     } catch (e) {
@@ -212,7 +212,7 @@ function getWorkflowByNodeId(nodeId) {
                 return {
                     tool: toolName,
                     toolName: getToolDisplayName(toolName),
-                    description: descriptionOverride || `执行工具: ${getToolDisplayName(toolName)}`,
+                    description: descriptionOverride || ((window.I18nService ? `${window.I18nService.t('execute_tool')}${getToolDisplayName(toolName)}` : `执行工具: ${getToolDisplayName(toolName)}`)),
                     mode: 'sync',
                     duration: (toolEvent.duration || 0) * 1000, // 转换为毫秒
                     result: resultText,
@@ -303,7 +303,7 @@ function getWorkflowByNodeId(nodeId) {
                     path = buildApiWorkspacePath(args.file_path);
                     const filename = extractFileName(args.file_path);
                     if (filename) {
-                        descriptionOverride = `信息保存到:${filename}`;
+                        descriptionOverride = (window.I18nService ? `${window.I18nService.t('info_saved_to')}${filename}` : `信息保存到:${filename}`);
                     }
                 }
             } catch (e) {
@@ -341,7 +341,7 @@ function getWorkflowByNodeId(nodeId) {
         return {
             tool: toolName,
             toolName: getToolDisplayName(toolName),
-            description: descriptionOverride || `执行工具: ${getToolDisplayName(toolName)}`,
+            description: descriptionOverride || ((window.I18nService ? `${window.I18nService.t('execute_tool')}${getToolDisplayName(toolName)}` : `执行工具: ${getToolDisplayName(toolName)}`)),
             mode: 'sync',
             duration: 2000, // 默认持续时间
             result: resultText,
@@ -372,6 +372,25 @@ function getLastManusStepMessage() {
 
 // 获取工具显示名称
 function getToolDisplayName(toolName) {
+    const toolKeys = {
+        'search_baidu': 'baidu_search',
+        'search_google': 'google_search',
+        'image_search': 'image_search',
+        'file_saver': 'file_save',
+        'file_read': 'file_read',
+        'data_analyzer': 'data_analyzer',
+        'predictor': 'predictor',
+        'report_generator': 'report_generator',
+        'create_plan': 'create_plan',
+        'fetch_website_content': 'fetch_website_content',
+        'tavily_search': 'tavily_search'
+    };
+    const key = toolKeys[toolName];
+    if (key && window.I18nService) {
+        const translated = window.I18nService.t(key);
+        if (translated && translated !== key) return translated;
+    }
+    // 回退：原中文映射
     const toolNames = {
         'search_baidu': '百度搜索',
         'search_google': '谷歌搜索',
@@ -875,7 +894,7 @@ function createToolCallItem(toolCall) {
     const hasContent = toolCall.url || toolCall.path;
     if (hasContent) {
         item.style.cursor = 'pointer';
-        item.title = '点击查看详情';
+        item.title = (window.I18nService ? window.I18nService.t('click_to_view_details') : '点击查看详情');
 
         // 添加点击事件
         item.addEventListener('click', function () {
@@ -1090,7 +1109,7 @@ function addToolCallToNodePanel(nodeId, tool) {
         status: 'completed',
         startTime: startTime,
         endTime: endTime,
-        result: tool.result || `工具 ${tool.toolName} 执行完成`,
+        result: tool.result || (window.I18nService ? window.I18nService.t('tool_execution_complete').replace('{toolName}', tool.toolName) : `工具 ${tool.toolName} 执行完成`),
         error: null,
         url: tool.url || null,  // 添加url属性
         path: tool.path || null // 添加path属性
@@ -1290,20 +1309,20 @@ function updateDynamicTitle(title) {
 // 生成状态文本
 function generateStatusText(tool, url, path) {
     if (tool === 'file_read') {
-        const fileName = path ? path.split('/').pop() || path.split('\\').pop() : '未知文件';
-        return `正在读取文件 ${fileName}`;
+        const fileName = path ? path.split('/').pop() || path.split('\\').pop() : (window.I18nService ? window.I18nService.t('unknown_file') : '未知文件');
+        return (window.I18nService ? window.I18nService.t('reading_file').replace('{fileName}', fileName) : `正在读取文件 ${fileName}`);
     } else if (tool === 'file_saver') {
-        const fileName = path ? path.split('/').pop() || path.split('\\').pop() : '未知文件';
-        return `正在保存文件 ${fileName}`;
+        const fileName = path ? path.split('/').pop() || path.split('\\').pop() : (window.I18nService ? window.I18nService.t('unknown_file') : '未知文件');
+        return (window.I18nService ? window.I18nService.t('saving_file').replace('{fileName}', fileName) : `正在保存文件 ${fileName}`);
     } else if (tool === 'search_baidu' || tool === 'search_google' || tool === 'tavily_search'|| tool === 'image_search') {
-        return `正在浏览 ${url}`;
+        return (window.I18nService ? window.I18nService.t('browsing_url').replace('{url}', url) : `正在浏览 ${url}`);
     } else if (url) {
-        return `正在浏览 ${url}`;
+        return (window.I18nService ? window.I18nService.t('browsing_url').replace('{url}', url) : `正在浏览 ${url}`);
     } else if (path) {
         const fileName = path.split('/').pop() || path.split('\\').pop();
-        return `正在处理文件 ${fileName}`;
+        return (window.I18nService ? window.I18nService.t('processing_file').replace('{fileName}', fileName) : `正在处理文件 ${fileName}`);
     }
-    return '正在处理...';
+    return (window.I18nService ? window.I18nService.t('processing') : '正在处理...');
 }
 
 function toggleLoadingIndicator(isShow) {
@@ -1505,7 +1524,7 @@ function showRightPanelForTool(toolCall) {
                 if (isBlank) return;
                 toggleLoadingIndicator(false);
                 if (statusElement) {
-                    statusElement.textContent = `加载超时: ${url}`;
+                    statusElement.textContent = (window.I18nService ? window.I18nService.t('loading_timeout').replace('{url}', url) : `加载超时: ${url}`);
                     statusElement.className = 'error';
                 }
                 console.warn('iframe加载超时:', url);
@@ -1546,7 +1565,7 @@ function showRightPanelForTool(toolCall) {
                 toggleLoadingIndicator(false);
                 // 更新状态文本
                 if (statusElement) {
-                    statusElement.textContent = `网页加载失败: ${url}`;
+                    statusElement.textContent = (window.I18nService ? window.I18nService.t('webpage_load_failed').replace('{url}', url) : `网页加载失败: ${url}`);
                     statusElement.className = 'error';
                 }
                 console.error('iframe加载失败:', url);
@@ -1590,7 +1609,7 @@ function showRightPanelForTool(toolCall) {
                     if (isBlank) return;
                     toggleLoadingIndicator(false);
                     if (statusElement) {
-                        statusElement.textContent = `加载超时: ${relativePath}`;
+                        statusElement.textContent = (window.I18nService ? window.I18nService.t('loading_timeout').replace('{url}', relativePath) : `加载超时: ${relativePath}`);
                         statusElement.className = 'error';
                     }
                     console.warn('iframe加载超时:', relativePath);
@@ -1617,7 +1636,7 @@ function showRightPanelForTool(toolCall) {
                     }
                     toggleLoadingIndicator(false);
                     if (statusElement) {
-                        statusElement.textContent = `网页加载失败: ${relativePath}`;
+                        statusElement.textContent = (window.I18nService ? window.I18nService.t('webpage_load_failed').replace('{url}', relativePath) : `网页加载失败: ${relativePath}`);
                         statusElement.className = 'error';
                     }
                     console.error('HTML 文件加载失败:', relativePath);
@@ -1650,7 +1669,7 @@ function loadMarkdownFile(filePath, tool) {
     const statusElement = document.getElementById('right-container-status');
 
     // 显示加载状态
-    markdownContent.innerHTML = '<div style="text-align: center; padding: 50px;"><i class="fas fa-spinner fa-spin"></i> 正在加载文件...</div>';
+    markdownContent.innerHTML = `<div style="text-align: center; padding: 50px;"><i class="fas fa-spinner fa-spin"></i> ${(window.I18nService ? window.I18nService.t('loading_file') : '正在加载文件...')}</div>`;
 
     // 更新状态文本
     if (statusElement) {
@@ -1680,7 +1699,7 @@ function loadMarkdownFile(filePath, tool) {
             // 更新状态文本
             if (statusElement) {
                 const fileName = filePath.split('/').pop() || filePath.split('\\').pop();
-                statusElement.textContent = `正在解析文件 ${fileName}`;
+                statusElement.textContent = (window.I18nService ? window.I18nService.t('parsing_file').replace('{fileName}', fileName) : `正在解析文件 ${fileName}`);
                 statusElement.className = 'loading';
             }
 
@@ -1713,16 +1732,16 @@ function loadMarkdownFile(filePath, tool) {
             markdownContent.innerHTML = `
                 <div style="text-align: center; padding: 50px; color: #f44336;">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <h3>文件加载失败</h3>
-                    <p>无法加载文件: ${filePath}</p>
-                    <p>错误信息: ${error.message}</p>
+                    <h3>${(window.I18nService ? window.I18nService.t('file_load_failed_title') : '文件加载失败')}</h3>
+                    <p>${(window.I18nService ? window.I18nService.t('unable_to_load_file').replace('{filePath}', filePath) : `无法加载文件: ${filePath}`)}</p>
+                    <p>${(window.I18nService ? window.I18nService.t('error_message').replace('{message}', error.message) : `错误信息: ${error.message}`)}</p>
                 </div>
             `;
 
             // 更新状态文本
             if (statusElement) {
                 const fileName = filePath.split('/').pop() || filePath.split('\\').pop();
-                statusElement.textContent = `文件 ${fileName} 加载失败`;
+                statusElement.textContent = (window.I18nService ? window.I18nService.t('file_load_failed').replace('{fileName}', fileName) : `文件 ${fileName} 加载失败`);
                 statusElement.className = 'error';
             }
         });
@@ -1893,7 +1912,7 @@ function hideStepsTooltip() {
 // 生成步骤列表HTML
 function generateStepsListHtml() {
     const steps = dagData.nodes;
-    let html = '<h4>任务步骤列表</h4>';
+    let html = `<h4>${(window.I18nService ? window.I18nService.t('task_steps_list') : '任务步骤列表')}</h4>`;
 
     steps.forEach(step => {
         const statusClass = step.status || 'not_started';
