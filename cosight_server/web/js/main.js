@@ -135,10 +135,10 @@ function getWorkflowByNodeId(nodeId) {
     if (typeof messageService !== 'undefined' && messageService.getStepToolEvents) {
         const stepIndex = nodeId - 1; // 节点ID从1开始，stepIndex从0开始
         const toolEvents = messageService.getStepToolEvents(stepIndex);
-
+        
         if (toolEvents && toolEvents.length > 0) {
             console.log(`从tool events获取Step ${nodeId}的数据，共${toolEvents.length}个工具调用`);
-
+            
             // 转换工具调用格式
             const tools = toolEvents
                 // 过滤内部工具，不在面板展示
@@ -150,61 +150,77 @@ function getWorkflowByNodeId(nodeId) {
                     let path = null;
                     let descriptionOverride = null;
 
-                    // 处理搜索工具的结果，提取URL
-                    if (['search_baidu', 'search_google', 'search_tavily'].includes(toolName)) {
-                        if (toolResult && toolResult.first_url) {
-                            url = toolResult.first_url;
-                        }
+                // 处理搜索工具的结果，提取URL
+                if (['search_baidu', 'search_google', 'tavily_search', 'image_search'].includes(toolName)) {
+                    if (toolResult && toolResult.first_url) {
+                        url = toolResult.first_url;
                     }
+                }
 
-                    // 处理文件保存工具，提取路径
-                    if (toolName === 'file_saver') {
-                        try {
-                            const args = JSON.parse(toolEvent.tool_args);
-                            if (args.file_path) {
-                                // 构造API工作区路径，例如：/api/nae-deep-research/v1/work_space/...
-                                path = buildApiWorkspacePath(args.file_path);
-                                // 设置描述为固定前缀 + 文件名
-                                const filename = extractFileName(args.file_path);
-                                if (filename) {
-                                    descriptionOverride = `信息保存到:${filename}`;
-                                }
+                // 处理文件保存工具，提取路径
+                if (toolName === 'file_saver') {
+                    try {
+                        const args = JSON.parse(toolEvent.tool_args || '{}');
+                        if (args.file_path) {
+                            path = buildApiWorkspacePath(args.file_path);
+                            const filename = extractFileName(args.file_path);
+                            if (filename) {
+                                descriptionOverride = `信息保存到:${filename}`;
                             }
-                        } catch (e) {
-                            console.warn('解析文件保存工具参数失败:', e);
                         }
+                    } catch (e) {
+                        console.warn('解析文件保存工具参数失败:', e);
                     }
+                }
 
-                    // 结果文本处理
-                    let resultText = '';
-                    if (toolResult) {
-                        if (typeof toolResult === 'string') {
-                            resultText = toolResult;
-                        } else if (toolResult.summary) {
-                            resultText = toolResult.summary;
-                        } else {
-                            resultText = JSON.stringify(toolResult);
+                // 处理文件读取工具，提取路径
+                if (toolName === 'file_read') {
+                    try {
+                        // 优先 processed_result.file_path
+                        const processed = toolEvent.tool_result;
+                        let filePath = processed && processed.file_path ? processed.file_path : null;
+                        if (!filePath) {
+                            const args = JSON.parse(toolEvent.tool_args || '{}');
+                            filePath = args.file || args.path || null;
                         }
+                        if (filePath) {
+                            path = buildApiWorkspacePath(filePath);
+                        }
+                    } catch (e) {
+                        console.warn('解析文件读取工具参数失败:', e);
                     }
+                }
 
-                    // file_saver 将 result 替换为描述内容，并清空描述
-                    if (toolName === 'file_saver' && descriptionOverride) {
-                        resultText = descriptionOverride;
-                        descriptionOverride = '';
+                // 结果文本处理
+                let resultText = '';
+                if (toolResult) {
+                    if (typeof toolResult === 'string') {
+                        resultText = toolResult;
+                    } else if (toolResult.summary) {
+                        resultText = toolResult.summary;
+                    } else {
+                        resultText = JSON.stringify(toolResult);
                     }
+                }
+                
+                // file_saver 将 result 替换为描述内容，并清空描述
+                if (toolName === 'file_saver' && descriptionOverride) {
+                    resultText = descriptionOverride;
+                    descriptionOverride = '';
+                }
 
-                    return {
-                        tool: toolName,
-                        toolName: getToolDisplayName(toolName),
-                        description: descriptionOverride || `执行工具: ${getToolDisplayName(toolName)}`,
-                        mode: 'sync',
-                        duration: (toolEvent.duration || 0) * 1000, // 转换为毫秒
-                        result: resultText,
-                        url: url,
-                        path: path,
-                        timestamp: toolEvent.timestamp
-                    };
-                });
+                return {
+                    tool: toolName,
+                    toolName: getToolDisplayName(toolName),
+                    description: descriptionOverride || `执行工具: ${getToolDisplayName(toolName)}`,
+                    mode: 'sync',
+                    duration: (toolEvent.duration || 0) * 1000, // 转换为毫秒
+                    result: resultText,
+                    url: url,
+                    path: path,
+                    timestamp: toolEvent.timestamp
+                };
+            });
 
             // 获取step标题
             let stepTitle = `Step ${nodeId}`;
@@ -250,64 +266,90 @@ function getWorkflowByNodeId(nodeId) {
         // 过滤内部工具，不在面板展示
         .filter(toolCall => toolCall.tool_name !== 'mark_step')
         .map(toolCall => {
-            const toolName = toolCall.tool_name;
-            let toolResult = toolCall.tool_result;
-            let url = null;
-            let path = null;
-            let descriptionOverride = null;
+        const toolName = toolCall.tool_name;
+        let toolResult = toolCall.tool_result;
+        let url = null;
+        let path = null;
+        let descriptionOverride = null;
 
-            // 处理搜索工具的结果，提取URL
-            if (['search_baidu', 'search_google', 'search_tavily'].includes(toolName)) {
-                try {
-                    const resultArray = parseSearchResults(toolResult);
-                    if (Array.isArray(resultArray) && resultArray.length > 0) {
-                        // 取第一个包含url字段的元素
-                        const withUrl = resultArray.find(it => it && it.url) || resultArray[0];
-                        url = withUrl && withUrl.url ? withUrl.url : null;
-                    }
-                } catch (e) {
-                    console.warn('解析搜索工具结果失败:', e);
-                }
-            }
-
-            // 处理文件保存工具，提取路径
-            if (toolName === 'file_saver') {
-                try {
-                    const args = JSON.parse(toolCall.tool_args);
-                    if (args.file_path) {
-                        // 构造API工作区路径，例如：/api/nae-deep-research/v1/work_space/...
-                        path = buildApiWorkspacePath(args.file_path);
-                        // 设置描述为固定前缀 + 文件名
-                        const filename = extractFileName(args.file_path);
-                        if (filename) {
-                            descriptionOverride = `信息保存到:${filename}`;
+        // 处理搜索工具的结果，提取URL
+        if (['search_baidu', 'search_google', 'tavily_search', 'image_search'].includes(toolName)) {
+            try {
+                // 优先 processed_result.first_url 风格（上游已解析对象）
+                if (toolResult && toolResult.first_url) {
+                    url = toolResult.first_url;
+                } else {
+                    // 特殊处理 tavily_search 和 image_search 的字符串结果
+                    if (toolName === 'tavily_search' || toolName === 'image_search') {
+                        url = extractUrlFromSearchResult(toolResult, toolName);
+                    } else {
+                        const resultArray = parseSearchResults(toolResult);
+                        if (Array.isArray(resultArray) && resultArray.length > 0) {
+                            const withUrl = resultArray.find(it => it && it.url) || resultArray[0];
+                            url = withUrl && withUrl.url ? withUrl.url : null;
                         }
                     }
-                } catch (e) {
-                    console.warn('解析文件保存工具参数失败:', e);
                 }
+            } catch (e) {
+                console.warn('解析搜索工具结果失败:', e);
             }
+        }
 
-            // 结果文本：优先使用原始字符串
-            let resultText = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
-            // file_saver 将 result 替换为描述内容，并清空描述
-            if (toolName === 'file_saver' && descriptionOverride) {
-                resultText = descriptionOverride;
-                descriptionOverride = '';
+        // 处理文件保存工具，提取路径
+        if (toolName === 'file_saver') {
+            try {
+                const args = JSON.parse(toolCall.tool_args || '{}');
+                if (args.file_path) {
+                    path = buildApiWorkspacePath(args.file_path);
+                    const filename = extractFileName(args.file_path);
+                    if (filename) {
+                        descriptionOverride = `信息保存到:${filename}`;
+                    }
+                }
+            } catch (e) {
+                console.warn('解析文件保存工具参数失败:', e);
             }
+        }
 
-            return {
-                tool: toolName,
-                toolName: getToolDisplayName(toolName),
-                description: descriptionOverride || `执行工具: ${getToolDisplayName(toolName)}`,
-                mode: 'sync',
-                duration: 2000, // 默认持续时间
-                result: resultText,
-                url: url,
-                path: path,
-                timestamp: toolCall.timestamp
-            };
-        });
+        // 处理文件读取工具，提取路径
+        if (toolName === 'file_read') {
+            try {
+                // 优先 processed_result.file_path
+                let filePath = null;
+                if (typeof toolResult === 'object' && toolResult && toolResult.file_path) {
+                    filePath = toolResult.file_path;
+                } else {
+                    const args = JSON.parse(toolCall.tool_args || '{}');
+                    filePath = args.file || args.path || null;
+                }
+                if (filePath) {
+                    path = buildApiWorkspacePath(filePath);
+                }
+            } catch (e) {
+                console.warn('解析文件读取工具参数失败:', e);
+            }
+        }
+
+        // 结果文本：优先使用原始字符串
+        let resultText = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+        // file_saver 将 result 替换为描述内容，并清空描述
+        if (toolName === 'file_saver' && descriptionOverride) {
+            resultText = descriptionOverride;
+            descriptionOverride = '';
+        }
+
+        return {
+            tool: toolName,
+            toolName: getToolDisplayName(toolName),
+            description: descriptionOverride || `执行工具: ${getToolDisplayName(toolName)}`,
+            mode: 'sync',
+            duration: 2000, // 默认持续时间
+            result: resultText,
+            url: url,
+            path: path,
+            timestamp: toolCall.timestamp
+        };
+    });
 
     return {
         title: stepName,
@@ -333,14 +375,15 @@ function getToolDisplayName(toolName) {
     const toolNames = {
         'search_baidu': '百度搜索',
         'search_google': '谷歌搜索',
-        'search_tavily': 'Tavily搜索',
+        'image_search': '图片搜索',
         'file_saver': '文件保存',
         'file_read': '文件读取',
         'data_analyzer': '数据分析',
         'predictor': '预测模型',
         'report_generator': '报告生成',
         'create_plan': '创建计划',
-        'fetch_website_content': '获取网页内容'
+        'fetch_website_content': '获取网页内容',
+        'tavily_search': 'Tavily搜索'
     };
     return toolNames[toolName] || toolName;
 }
@@ -353,7 +396,7 @@ function parseSearchResults(raw) {
     // 优先尝试标准 JSON
     try {
         return JSON.parse(raw);
-    } catch (_) { }
+    } catch (_) {}
     // 回退：尝试将 Python 风格的单引号数组转为 JS 对象并安全求值
     try {
         // 直接用函数构造避免污染作用域；仅在受信任环境中使用
@@ -513,7 +556,7 @@ function createNodeToolPanel(nodeId, nodeName, sticky = false) {
                 safeTitle = detailPart ? `${namePart} - ${detailPart}` : namePart;
             }
         }
-    } catch (e) { }
+    } catch (e) {}
 
     // 创建新面板
     panel = document.createElement('div');
@@ -549,7 +592,7 @@ function createNodeToolPanel(nodeId, nodeName, sticky = false) {
                     headerEl.style.position = 'relative';
                 }
             }
-        } catch (_) { }
+        } catch (_) {}
         if (closeBtn) {
             // 强制按钮位于顶层并可命中
             try {
@@ -558,14 +601,14 @@ function createNodeToolPanel(nodeId, nodeName, sticky = false) {
                 closeBtn.style.right = '8px';
                 closeBtn.style.zIndex = '10';
                 closeBtn.style.pointerEvents = 'auto';
-            } catch (_) { }
+            } catch (_) {}
 
             // 阻止事件冒泡，避免触发header的拖拽mousedown
-            closeBtn.addEventListener('mousedown', function (e) {
+            closeBtn.addEventListener('mousedown', function(e) { 
                 console.log(`[panel:${nodeId}] close button mousedown`);
                 e.stopPropagation();
             });
-            closeBtn.addEventListener('click', function (e) {
+            closeBtn.addEventListener('click', function(e) {
                 console.log(`[panel:${nodeId}] close button clicked`);
                 e.preventDefault();
                 e.stopPropagation();
@@ -948,11 +991,11 @@ function updateNodeToolPanel(nodeId, toolCall) {
                             nodeName = title ? `Step ${nodeId} - ${title}` : `Step ${nodeId}`;
                         }
                     }
-                } catch (_) { }
+                } catch (_) {}
                 panel = createNodeToolPanel(nodeId, nodeName, true);
                 autoOpenedPanels.add(nodeId);
             }
-        } catch (_) { }
+        } catch (_) {}
         // 若仍未创建成功，则直接返回避免报错
         panel = nodeToolPanels.get(nodeId);
         if (!panel) return;
@@ -1017,6 +1060,8 @@ function getToolSpecificIcon(tool) {
         'file_saver': 'fas fa-save',
         'search_baidu': 'fab fa-baidu',
         'search_google': 'fab fa-google',
+        'tavily_search': 'fas fa-search',
+        'image_search': 'fas fa-search',
         'execute_code': 'fas fa-file-code',
         'create_html_report': 'fas fa-chart-line'
     };
@@ -1114,7 +1159,7 @@ function initInputHandler() {
                 if (window.messageService && typeof window.messageService.clearStepToolEvents === 'function') {
                     window.messageService.clearStepToolEvents();
                 }
-
+                
                 // 关闭所有已打开的工具面板
                 if (nodeToolPanels && nodeToolPanels.size > 0) {
                     const panelIds = Array.from(nodeToolPanels.keys());
@@ -1123,7 +1168,7 @@ function initInputHandler() {
                     });
                     if (nodeToolPanels.clear) nodeToolPanels.clear();
                 }
-
+                
                 // 清理右侧内容
                 try {cleanupAllResources();} catch (_) { }
                 messageService.sendMessage(message);
@@ -1159,7 +1204,7 @@ function initInputHandler() {
         function sendInitialMessage() {
             credibilityService.clearCredibilityData();
             const message = initialMessageInput.value.trim();
-
+            
             // 新会话开始：优先清空缓存并关闭所有已打开的step面板
             try {
                 if (typeof window !== 'undefined' && typeof window.resetSessionCaches === 'function') {
@@ -1173,12 +1218,12 @@ function initInputHandler() {
                             });
                             if (nodeToolPanels.clear) nodeToolPanels.clear();
                         }
-                    } catch (_) { }
-                    try {cleanupAllResources();} catch (_) { }
-                    try {localStorage.removeItem('cosight:lastManusStep');} catch (_) { }
+                    } catch (_) {}
+                    try { cleanupAllResources(); } catch (_) {}
+                    try { localStorage.removeItem('cosight:lastManusStep'); } catch (_) {}
                 }
-            } catch (_) { }
-
+            } catch (_) {}
+            
             // if (message) {
             console.log('发送初始消息:', message);
             // 隐藏初始输入框并显示主界面
@@ -1250,7 +1295,7 @@ function generateStatusText(tool, url, path) {
     } else if (tool === 'file_saver') {
         const fileName = path ? path.split('/').pop() || path.split('\\').pop() : '未知文件';
         return `正在保存文件 ${fileName}`;
-    } else if (tool === 'search_baidu' || tool === 'search_google') {
+    } else if (tool === 'search_baidu' || tool === 'search_google' || tool === 'tavily_search'|| tool === 'image_search') {
         return `正在浏览 ${url}`;
     } else if (url) {
         return `正在浏览 ${url}`;
@@ -1885,7 +1930,7 @@ function resetSessionCaches() {
             ids.forEach(id => {
                 try {
                     completeToolCall(id, '会话已重置，调用中止', false);
-                } catch (_) { }
+                } catch (_) {}
             });
         }
 
@@ -1914,15 +1959,15 @@ function resetSessionCaches() {
             localStorage.removeItem('cosight:lastManusStep');
             localStorage.removeItem('cosight:stepToolEvents');
             localStorage.removeItem('cosight:planIdByTopic');
-            localStorage.removeItem('cosight:pendingRequests');
-        } catch (_) { }
+            localStorage.removeItem('cosight:pendingRequests');            
+        } catch (_) {}
 
         // 标记全局面板容器为空
         const container = document.getElementById('tool-call-panels-container');
         if (container) {
             container.innerHTML = '';
         }
-
+        
         console.log('[session] 缓存已重置');
     } catch (e) {
         console.warn('重置会话缓存时发生异常:', e);
@@ -1994,4 +2039,89 @@ if (typeof module !== 'undefined' && module.exports) {
         // 导出会话重置能力
         resetSessionCaches
     };
+}
+
+// 从搜索工具结果中提取URL
+function extractUrlFromSearchResult(toolResult, toolName) {
+    if (!toolResult) return null;
+
+    // 统一字符串中的 Python 常量为 JSON 常量，便于后续解析
+    const normalizePythonLiterals = (s) => s
+        .replace(/\bNone\b/g, 'null')
+        .replace(/\bTrue\b/g, 'true')
+        .replace(/\bFalse\b/g, 'false')
+        .replace(/\\'/g, "'");
+
+    let parsed = null;
+
+    // 情况1：已是对象
+    if (typeof toolResult === 'object') {
+        parsed = toolResult;
+    } else if (typeof toolResult === 'string') {
+        let s = toolResult.trim();
+        // 优先尝试 JSON 解析
+        try {
+            parsed = JSON.parse(s);
+        } catch (_) {
+            // 尝试规范化 Python 风格并解析
+            try {
+                s = normalizePythonLiterals(s);
+                // 先尝试 JSON
+                try {
+                    parsed = JSON.parse(s);
+                } catch (__) {
+                    // 再尝试函数求值（受信任环境）
+                    const fn = new Function('return (' + s + ')');
+                    parsed = fn();
+                }
+            } catch (e2) {
+                console.warn('extractUrlFromSearchResult 解析失败:', e2);
+                parsed = null;
+            }
+        }
+    }
+
+    if (!parsed) return null;
+
+    const name = String(toolName || '').toLowerCase();
+
+    if (name === 'tavily_search' || name === 'search_tavily') {
+        // tavily_search 结构: { results: [ { url } ] }
+        if (parsed.results && Array.isArray(parsed.results) && parsed.results.length > 0) {
+            const first = parsed.results.find(it => it && (it.url || it.link)) || parsed.results[0];
+            return (first && (first.url || first.link)) || null;
+        }
+    } else if (name === 'image_search') {
+        // image_search 结构: { content: { 0: { url } } }
+        if (parsed.content && typeof parsed.content === 'object') {
+            for (const key in parsed.content) {
+                const item = parsed.content[key];
+                if (item && (item.url || item.link)) {
+                    return item.url || item.link;
+                }
+            }
+        }
+        // 兜底：若存在 images 数组且为可浏览链接
+        if (Array.isArray(parsed.images) && parsed.images.length > 0) {
+            return parsed.images[0] || null;
+        }
+    } else {
+        // 其它搜索工具的兜底处理：数组或对象里找 url/link
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            const withUrl = parsed.find(it => it && (it.url || it.link)) || parsed[0];
+            return (withUrl && (withUrl.url || withUrl.link)) || null;
+        }
+        if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed.results) && parsed.results.length > 0) {
+                const first = parsed.results.find(it => it && (it.url || it.link)) || parsed.results[0];
+                return (first && (first.url || first.link)) || null;
+            }
+            if (Array.isArray(parsed.items) && parsed.items.length > 0) {
+                const first = parsed.items.find(it => it && (it.url || it.link)) || parsed.items[0];
+                return (first && (first.url || first.link)) || null;
+            }
+        }
+    }
+
+    return null;
 }

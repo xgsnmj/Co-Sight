@@ -301,7 +301,7 @@ class MessageService {
         let descriptionOverride = null;
 
         // 处理搜索工具的结果，提取URL
-        if (['search_baidu', 'search_google', 'search_tavily'].includes(toolCallRecord.tool_name)) {
+        if (['search_baidu', 'search_google', 'tavily_search', 'image_search'].includes(toolCallRecord.tool_name)) {
             const processedResult = toolCallRecord.tool_result;
             if (processedResult && processedResult.first_url) {
                 url = processedResult.first_url;
@@ -324,6 +324,25 @@ class MessageService {
             }
         }
 
+        // 处理文件读取工具，提取路径
+        if (toolCallRecord.tool_name === 'file_read') {
+            try {
+                // 优先 processed_result.file_path
+                const processed = toolCallRecord.tool_result;
+                let filePath = processed && processed.file_path ? processed.file_path : null;
+                if (!filePath) {
+                    // 回退从 tool_args 读取 { file: "..." }
+                    const args = JSON.parse(toolCallRecord.tool_args || '{}');
+                    filePath = args.file || args.path || null;
+                }
+                if (filePath) {
+                    path = buildApiWorkspacePath(filePath);
+                }
+            } catch (e) {
+                console.warn('解析文件读取工具参数失败:', e);
+            }
+        }
+        
         // 结果文本
         let resultText = '';
         if (toolCallRecord.status === 'running') {
