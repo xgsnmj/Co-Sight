@@ -56,7 +56,8 @@
     "no_credibility_info": "暂无可信分级信息",
     "no_credibility_info_desc": "节点 {nodeId} 目前没有可信分级数据",
     "data_anomaly": "数据异常",
-    "data_anomaly_desc": "节点 {nodeId} 的可信分级数据格式异常"
+    "data_anomaly_desc": "节点 {nodeId} 的可信分级数据格式异常",
+    "credibility_info_title": "步骤 {nodeId} 的可信分级信息"
   },
   "en": {
     "app_title": "Co-Sight Super Agent",
@@ -115,6 +116,7 @@
     "no_credibility_info": "No credibility info",
     "no_credibility_info_desc": "Node {nodeId} currently has no credibility data",
     "data_anomaly": "Data anomaly",
-    "data_anomaly_desc": "Credibility data format is abnormal for node {nodeId}"
+    "data_anomaly_desc": "Credibility data format is abnormal for node {nodeId}",
+    "credibility_info_title": "The Credibility info for Step {nodeId}"
   }
 }

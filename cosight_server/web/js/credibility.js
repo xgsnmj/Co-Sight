@@ -198,7 +198,7 @@ class CredibilityService {
         let credibilityHTML = `
             <div class="credibility-section">
                 <h4>
-                    <i class="fas fa-shield-alt"></i> Step ${nodeId} 的可信分级信息
+                    <i class="fas fa-shield-alt"></i> ${(window.I18nService ? window.I18nService.t('credibility_info_title').replace('{nodeId}', nodeId) : `步骤 ${nodeId} 的可信分级信息`)}
                 </h4>
                 <div class="credibility-levels">
         `;
