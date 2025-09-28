@@ -231,25 +231,40 @@ def planner_create_plan_prompt(question, output_format=""):
     # 根据模型类型提供不同的规划指导
     if is_claude and contains_chinese:
         create_plan_prompt = f"""
-创建一个包含 3-5 个步骤的简洁且聚焦的计划以完成此任务：{question}
-请记住保持步骤简洁，并仅包含真正必要的内容。
+创建一个包含 4-6 个步骤的简洁且聚焦的计划以完成此任务：{question}
+要求：
+- 优先设计可并行执行的步骤，明确哪些步骤可并行
+- 总步骤数不超过 6 步
+- 保持步骤简洁，仅包含真正必要的内容
 """
     elif is_claude and not contains_chinese:
         create_plan_prompt = f"""
-Create a simple, focused plan with 3-5 steps to accomplish this task: {question}
-Remember to keep steps concise and only include what's truly necessary.
+Create a simple, focused plan with 4-6 steps to accomplish this task: {question}
+Requirements:
+- Prefer designing steps that can run in parallel; explicitly mark parallelizable steps
+- Limit the total number of steps to at most 6
+- Keep steps concise and only include what's truly necessary
 """
     elif not is_claude and contains_chinese:
 #         create_plan_prompt = f"""
 # 使用 create_plan 工具，制定一个详细的计划以完成此任务: {question}
 # """
         create_plan_prompt = f"""
-创建一个包含 4-6 个包含并行步骤的简洁且聚焦的计划以完成此任务：{question}
-请记住保持步骤简洁，并仅包含真正必要的内容。
+创建一个包含 4-6 个步骤（尽量包含并行步骤）的简洁且聚焦的计划以完成此任务：{question}
+要求：
+- 明确哪些步骤可并行执行，并在计划中标注
+- 总步骤数不超过 6 步
+- 计划末尾必须包含“生成 HTML 报告”的总结步骤（包含完整 HTML 结构与清晰分节）
+- 保持步骤简洁，仅包含真正必要的内容
 """
     else:
         create_plan_prompt = f"""
 Using the create_plan tool, create a detailed plan to accomplish this task: {question}
+Requirements:
+- Prefer parallelizable steps and explicitly indicate parallel execution opportunities
+- Limit the plan to at most 6 total steps
+- Include a final step to “Generate an HTML report” (with complete HTML structure and clear sections)
+- Keep steps concise and necessary only
 """
 
     if contains_chinese:
@@ -306,6 +321,7 @@ def planner_re_plan_prompt(question, plan, output_format=""):
 {plan}
 
 根据系统提示中的重新规划规则评估并调整当前计划。
+请确保计划仍然包含“生成 HTML 报告”的最终步骤；若缺失，请补充该总结步骤（要求完整 HTML 结构与清晰分节）。
     """
     else:
         replan_prompt = f"""
@@ -332,6 +348,7 @@ Current plan status:
 {plan}
 
 Evaluate and adjust the current plan according to the replanning rules in the system prompt.
+Ensure the plan still contains a final step to “Generate an HTML report”; if missing, add this summarization step (with complete HTML structure and clear sections).
     """
 
     return replan_prompt
@@ -373,6 +390,16 @@ def planner_finalize_plan_prompt(question, plan, output_format=""):
 - 任务是否成功完成？如果成功，哪些方面做得好？
 - 如果有遇到问题，具体是什么？
 - 保持总结简洁明了
+
+**重要：必须生成一份完整的HTML格式报告作为最终输出**
+HTML报告要求：
+- 包含完整的HTML文档结构（<!DOCTYPE html>, <head>, <body>）
+- 使用专业的CSS样式
+- 包含清晰的标题、章节和子章节
+- 总结所有完成的步骤及其结果
+- 包含关键发现、结果或交付物
+- 使用表格、列表等视觉元素
+- 确保报告结构清晰、内容完整
 """
         else:
             finalize_prompt += f"""
@@ -383,6 +410,16 @@ def planner_finalize_plan_prompt(question, plan, output_format=""):
 - 如果任务成功，请输出关键成功因素
 - 如果任务失败，请输出主要失败原因及改进建议
 - 不要创建新的计划，只需总结当前计划
+
+**重要：必须生成一份完整的HTML格式报告作为最终输出**
+HTML报告要求：
+- 包含完整的HTML文档结构（<!DOCTYPE html>, <head>, <body>）
+- 使用专业的CSS样式
+- 包含清晰的标题、章节和子章节
+- 总结所有完成的步骤及其结果
+- 包含关键发现、结果或交付物
+- 使用表格、列表等视觉元素
+- 确保报告结构清晰、内容完整
 """
     else:
         finalize_prompt = f"""
@@ -404,6 +441,16 @@ Please provide a brief summary of the task results:
 - Was the task completed successfully? If yes, what worked well?
 - If there were issues, what were they?
 - Keep your summary concise and to the point
+
+**IMPORTANT: You MUST generate a comprehensive HTML format report as the final output**
+HTML Report Requirements:
+- Include complete HTML document structure (<!DOCTYPE html>, <head>, <body>)
+- Use professional CSS styling
+- Include clear headers, sections, and subsections
+- Summarize all completed steps and their outcomes
+- Include key findings, results, or deliverables
+- Use visual elements such as tables, lists, and formatting
+- Ensure the report is well-structured and complete
 """
         else:
             finalize_prompt += f"""
@@ -414,5 +461,15 @@ Please generate a detailed task summary report based on the above information, i
 - If the task was successful, output the key success factors
 - If the task failed, output the main reasons for failure and improvement suggestions
 - Don't create another plan, just summarize the current plan
+
+**IMPORTANT: You MUST generate a comprehensive HTML format report as the final output**
+HTML Report Requirements:
+- Include complete HTML document structure (<!DOCTYPE html>, <head>, <body>)
+- Use professional CSS styling
+- Include clear headers, sections, and subsections
+- Summarize all completed steps and their outcomes
+- Include key findings, results, or deliverables
+- Use visual elements such as tables, lists, and formatting
+- Ensure the report is well-structured and complete
 """
     return finalize_prompt

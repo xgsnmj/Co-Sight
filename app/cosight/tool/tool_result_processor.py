@@ -15,12 +15,82 @@
 
 import re
 import json
-from typing import Any, Dict, Optional
+import requests
+from typing import Any, Dict, Optional, List
 from app.common.logger_util import logger
 
 
 class ToolResultProcessor:
     """工具结果处理器，针对不同工具类型处理结果"""
+    
+    @staticmethod
+    def batch_check_embeddable(urls: List[str], max_check: int = 10) -> Dict[str, bool]:
+        """
+        批量检查多个URL的iframe可嵌入性
+        
+        Args:
+            urls: 要检查的URL列表
+            max_check: 最大检查数量，避免过多请求
+            
+        Returns:
+            Dict[str, bool]: URL到可嵌入性的映射
+        """
+        results = {}
+        urls_to_check = urls[:max_check]
+        
+        for url in urls_to_check:
+            results[url] = ToolResultProcessor.check_embeddable(url)
+        
+        # 对于未检查的URL，默认认为可以嵌入
+        for url in urls[max_check:]:
+            results[url] = True
+            
+        return results
+    
+    @staticmethod
+    def check_embeddable(url: str) -> bool:
+        """
+        检查给定URL是否可以在iframe中嵌入，通过检查HTTP头信息
+        
+        Args:
+            url: 要检查的URL
+            
+        Returns:
+            bool: 如果可以嵌入返回True，否则返回False
+        """
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        try:
+            # 使用流式GET请求只获取头信息，不下载完整内容
+            with requests.get(url, headers=headers, timeout=10, stream=True, allow_redirects=True) as response:
+                response.raise_for_status()  # 对于错误状态码抛出异常 (4xx 或 5xx)
+                # 头信息不区分大小写，所以将键转换为小写
+                response_headers = {k.lower(): v for k, v in response.headers.items()}
+                
+                # 1. 检查 X-Frame-Options 头
+                x_frame_options = response_headers.get('x-frame-options', '').lower()
+                if x_frame_options in ('deny', 'sameorigin'):
+                    return False
+                
+                # 2. 检查 Content-Security-Policy 头中的 frame-ancestors
+                csp = response_headers.get('content-security-policy', '')
+                if 'frame-ancestors' in csp:
+                    if "'none'" in csp:
+                        return False
+                    if "'self'" in csp:
+                        return False
+                    if '*' not in csp:
+                        return False
+                
+                # 如果没有找到阻止头信息，假设可以嵌入
+                return True
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"无法检查URL '{url}' 的嵌入状态: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"检查URL '{url}' 嵌入状态时发生意外错误: {e}")
+            return False
     
     @staticmethod
     def _to_frontend_url(path_value: str) -> str:
@@ -163,16 +233,40 @@ class ToolResultProcessor:
             # 限制URL数量，避免过多
             unique_urls = unique_urls[:20]
             
+            # 批量检查URL的iframe可嵌入性（限制检查数量以提高性能）
+            try:
+                embeddable_results = ToolResultProcessor.batch_check_embeddable(unique_urls, max_check=10)
+                
+                embeddable_urls = []
+                non_embeddable_urls = []
+                
+                for url, is_embeddable in embeddable_results.items():
+                    if is_embeddable:
+                        embeddable_urls.append(url)
+                    else:
+                        non_embeddable_urls.append(url)
+                        
+            except Exception as e:
+                logger.error(f"批量检查URL iframe可嵌入性时出错: {e}")
+                # 如果批量检查失败，所有URL默认认为可以嵌入
+                embeddable_urls = unique_urls.copy()
+                non_embeddable_urls = []
+            
             # 如果之前没有找到result_id，使用去重后的URL数量
             if result_count == 0:
                 result_count = len(unique_urls)
             
             return {
                 "tool_type": "search",
-                "summary": f"搜索完成，找到 {result_count} 个结果",
-                "first_url": unique_urls[0] if unique_urls else None,
-                "urls": unique_urls,  # 添加所有URL列表
+                "summary": f"搜索完成，找到 {result_count} 个结果，其中 {len(embeddable_urls)} 个可在电脑区浏览",
+                "summary_en": f"Search completed, found {result_count} results, {len(embeddable_urls)} can be browsed in desktop area",
+                "first_url": embeddable_urls[0] if embeddable_urls else None,
+                "urls": unique_urls,  # 所有URL列表
+                "embeddable_urls": embeddable_urls,  # 可嵌入iframe的URL列表
+                "non_embeddable_urls": non_embeddable_urls,  # 不可嵌入iframe的URL列表
                 "result_count": result_count,
+                "embeddable_count": len(embeddable_urls),
+                "non_embeddable_count": len(non_embeddable_urls),
                 "has_content": "Error fetching content" not in str(tool_result)
             }
         except Exception as e:
@@ -180,6 +274,7 @@ class ToolResultProcessor:
             return {
                 "tool_type": "search",
                 "summary": "搜索完成",
+                "summary_en": "Search completed",
                 "error": str(e)
             }
     
@@ -199,6 +294,7 @@ class ToolResultProcessor:
             return {
                 "tool_type": "code_execution",
                 "summary": f"代码执行{'成功' if is_success else '失败'}",
+                "summary_en": f"Code execution {'successful' if is_success else 'failed'}",
                 "code_content": code_content[:200] + "..." if len(code_content) > 200 else code_content,
                 "output_length": output_length,
                 "is_success": is_success
@@ -208,6 +304,7 @@ class ToolResultProcessor:
             return {
                 "tool_type": "code_execution",
                 "summary": "代码执行完成",
+                "summary_en": "Code execution completed",
                 "error": str(e)
             }
     
@@ -248,9 +345,18 @@ class ToolResultProcessor:
                 operation = "文件操作"
                 summary = "文件操作完成"
             
+            # 生成英文摘要
+            if 'read' in tool_name.lower():
+                summary_en = f"File read completed, content length: {len(tool_result)} characters"
+            elif 'save' in tool_name.lower() or 'write' in tool_name.lower():
+                summary_en = "File save completed"
+            else:
+                summary_en = "File operation completed"
+            
             return {
                 "tool_type": "file_operation",
                 "summary": summary,
+                "summary_en": summary_en,
                 "operation": operation,
                 "file_path": file_path,
                 "content_length": len(tool_result) if 'read' in tool_name.lower() else None
@@ -260,6 +366,7 @@ class ToolResultProcessor:
             return {
                 "tool_type": "file_operation",
                 "summary": "文件操作完成",
+                "summary_en": "File operation completed",
                 "error": str(e)
             }
     
@@ -281,9 +388,16 @@ class ToolResultProcessor:
                 operation = "网页操作"
                 summary = "网页操作完成"
             
+            # 生成英文摘要
+            if 'fetch' in tool_name.lower():
+                summary_en = f"Web scraping completed, content length: {len(tool_result)} characters"
+            else:
+                summary_en = "Web operation completed"
+            
             return {
                 "tool_type": "web_operation",
                 "summary": summary,
+                "summary_en": summary_en,
                 "operation": operation,
                 "url": url,
                 "content_length": len(tool_result)
@@ -293,6 +407,7 @@ class ToolResultProcessor:
             return {
                 "tool_type": "web_operation",
                 "summary": "网页操作完成",
+                "summary_en": "Web operation completed",
                 "error": str(e)
             }
     
@@ -339,9 +454,15 @@ class ToolResultProcessor:
             if is_error:
                 summary += f"，错误信息: {tool_result}"
             
+            # 生成英文摘要
+            summary_en = f"Website content scraping {'successful' if not is_error else 'failed'}, content length: {content_length} characters"
+            if is_error:
+                summary_en += f", error: {tool_result}"
+            
             return {
                 "tool_type": "website_content",
                 "summary": summary,
+                "summary_en": summary_en,
                 "operation": "网站内容抓取",
                 "url": url,
                 "content_length": content_length,
@@ -357,6 +478,7 @@ class ToolResultProcessor:
             return {
                 "tool_type": "website_content",
                 "summary": "网站内容抓取完成",
+                "summary_en": "Website content scraping completed",
                 "operation": "网站内容抓取",
                 "error": str(e),
                 "is_success": False
@@ -374,9 +496,16 @@ class ToolResultProcessor:
                 operation = "图像处理"
                 summary = "图像处理完成"
             
+            # 生成英文摘要
+            if 'question' in tool_name.lower():
+                summary_en = "Image analysis completed"
+            else:
+                summary_en = "Image processing completed"
+            
             return {
                 "tool_type": "image_analysis",
                 "summary": summary,
+                "summary_en": summary_en,
                 "operation": operation,
                 "result_length": len(tool_result)
             }
@@ -385,6 +514,7 @@ class ToolResultProcessor:
             return {
                 "tool_type": "image_analysis",
                 "summary": "图像处理完成",
+                "summary_en": "Image processing completed",
                 "error": str(e)
             }
     
@@ -394,6 +524,7 @@ class ToolResultProcessor:
         return {
             "tool_type": "other",
             "summary": f"{tool_name} 执行完成",
+            "summary_en": f"{tool_name} execution completed",
             "result_length": len(tool_result),
             "has_result": bool(tool_result.strip())
         }

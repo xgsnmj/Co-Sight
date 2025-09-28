@@ -546,6 +546,125 @@ class MessageService {
         }
         WebSocketService.sendMessage(topic, JSON.stringify(message));
     }
+
+    /**
+     * 发送回放请求
+     * - 从 localStorage 读取 planId 与 workspace
+     *   - planId: 从 cosight:planIdByTopic 中取当前最近一个未完成或最近记录的 planId；若无，则提示
+     *   - workspace: 从 cosight:lastManusStep 中的 initData.step_files 的任意项的 path 中解析工作空间名
+     */
+    sendReplay() {
+        try {
+            // 解析 workspace
+            let replayWorkspace = null;
+            try {
+                // 1) 优先从 cosight:workspace 读取
+                // const wsRaw = localStorage.getItem('cosight:workspace');
+                const wsRaw ='work_space_20250926_202755_412701';
+                if (wsRaw && typeof wsRaw === 'string' && wsRaw.trim().length > 0) {
+                    replayWorkspace = wsRaw.trim();
+                }
+                // 2) 回退到从 lastManusStep 推断
+                if (!replayWorkspace) {
+                    const lastStepRaw = localStorage.getItem('cosight:lastManusStep');
+                    if (lastStepRaw) {
+                        const lastStep = JSON.parse(lastStepRaw);
+                        const initData = lastStep?.message?.data?.initData;
+                        const stepFiles = initData?.step_files || {};
+                        // 取第一个有 path 的文件，解析其工作空间前缀
+                        outer: for (const key of Object.keys(stepFiles)) {
+                            const arr = stepFiles[key];
+                            if (Array.isArray(arr) && arr.length > 0) {
+                                for (const item of arr) {
+                                    const p = item?.path;
+                                    if (typeof p === 'string') {
+                                        // 示例: work_space_20250926_194936_689374/xxx/yyy
+                                        const idx = p.indexOf('/');
+                                        replayWorkspace = idx > 0 ? p.slice(0, idx) : p;
+                                        break outer;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('解析workspace失败:', e);
+            }
+
+            // 解析 planId（从 cosight:planIdByTopic 选择最新一个记录）
+            let replayPlanId = null;
+            try {
+                // const planRaw = localStorage.getItem('cosight:replayid');
+                const planRaw = '123';
+                if (planRaw) {
+                    replayPlanId = planRaw
+                    // const map = JSON.parse(planRaw);
+                    // const entries = Object.entries(map);
+                    // if (entries.length > 0) {
+                    //     // 选择 savedAt 最大或任意最后一个；这里按 Object 顺序取最后一个
+                    //     const last = entries[entries.length - 1][1];
+                    //     if (last && last.planId) replayPlanId = last.planId;
+                    // }
+                }
+            } catch (e) {
+                console.warn('解析planId失败:', e);
+            }
+
+            if (!replayPlanId) {
+                alert('未找到可用的 planId，无法回放');
+                return;
+            }
+            if (!replayWorkspace) {
+                alert('未找到可用的 workspace，无法回放');
+                return;
+            }
+
+            // 生成新的 topic 用于订阅这次回放
+            const topic = WebSocketService.generateUUID();
+            WebSocketService.subscribe(topic, this.receiveMessage.bind(this));
+
+            const message = {
+                uuid: WebSocketService.generateUUID(),
+                type: 'multi-modal',
+                from: 'human',
+                timestamp: Date.now(),
+                initData: [{ type: 'text', value: '[Replay] 请求回放' }],
+                roleInfo: { name: 'admin' },
+                mentions: [],
+                extra: {
+                    // 两处都放置以兼容服务端提取逻辑
+                    replay: true,
+                    replayWorkspace: replayWorkspace,
+                    replayPlanId: replayPlanId,
+                    fromBackEnd: {
+                        actualPrompt: JSON.stringify({ deepResearchEnabled: true }),
+                        replay: true,
+                        replayWorkspace: replayWorkspace,
+                        replayPlanId: replayPlanId
+                    }
+                },
+                sessionInfo: {
+                    // 提示服务端不要生成新的 planId
+                    messageSerialNumber: replayPlanId
+                }
+            };
+
+            // 记录为 pending（便于刷新后恢复订阅）
+            try {
+                const pendingRaw = localStorage.getItem('cosight:pendingRequests');
+                const pendings = pendingRaw ? JSON.parse(pendingRaw) : {};
+                pendings[topic] = { message, savedAt: Date.now(), stillPending: true };
+                localStorage.setItem('cosight:pendingRequests', JSON.stringify(pendings));
+            } catch (e) {
+                console.warn('保存回放pending失败:', e);
+            }
+
+            WebSocketService.sendMessage(topic, JSON.stringify(message));
+        } catch (e) {
+            console.error('发送回放请求失败:', e);
+        }
+    }
 }
 
 // 创建全局实例

@@ -45,6 +45,7 @@ class BaseAgent:
         self.functions = functions
         self.history = []
         self.plan_id = plan_id
+        self._tool_event_sequence = 0  # 工具事件序列号
         # Only set plan to None if it hasn't been set by subclass
         if not hasattr(self, 'plan'):
             self.plan = None  # Will be set by subclasses that have access to Plan
@@ -151,6 +152,9 @@ class BaseAgent:
             if not getattr(self, 'plan_id', None):
                 return
             
+            # 增加序列号确保事件顺序
+            self._tool_event_sequence += 1
+            
             # 构建事件数据
             event_data = {
                 "event_type": event_type,
@@ -158,7 +162,8 @@ class BaseAgent:
                 "tool_name_zh": self._get_tool_name_zh(tool_name),
                 "tool_args": tool_args,
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "step_index": step_index
+                "step_index": step_index,
+                "sequence": self._tool_event_sequence  # 添加序列号
             }
             
             if duration is not None:

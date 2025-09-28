@@ -682,6 +682,7 @@ function updatePanelPosition(panel, nodeId) {
 function calculateOptimalPanelTop(panel, nodeRect) {
     const margin = 20;
     const panelHeight = panel.offsetHeight;
+    const baseOffset = 40; // 整体向下偏移
 
     // 直接使用相对于视口的位置（与test-panel.html保持一致）
     const idealTop = nodeRect.top + nodeRect.height / 2 - panelHeight / 2;
@@ -706,6 +707,12 @@ function calculateOptimalPanelTop(panel, nodeRect) {
         // 如果面板完全在屏幕内，保持理想位置
         finalTop = idealTop;
     }
+
+    // 应用整体下移偏移量，并再次夹取边界
+    finalTop = Math.min(
+        Math.max(finalTop + baseOffset, margin),
+        window.innerHeight - panelHeight - margin
+    );
 
     return finalTop;
 }
@@ -1163,15 +1170,18 @@ window.debugPanel = {
 function initInputHandler() {
     const messageInput = document.getElementById('message-input');
     const sendButton = document.getElementById('send-button');
+    const replayButton = document.getElementById('replay-button');
     const initialMessageInput = document.getElementById('initial-message-input');
     const initialSendButton = document.getElementById('initial-send-button');
 
     // 初始化输入框处理
     if (messageInput && sendButton) {
-        // 发送消息函数
+        // 发送消息函数（尾部2个以上空格 => 回放）
         function sendMessage() {
             credibilityService.clearCredibilityData();
-            const message = messageInput.value.trim();
+            const raw = messageInput.value;
+            const endsWithMultiSpaces = /\s{2,}$/.test(raw);
+            const message = raw.trim();
             if (message) {
                 console.log('发送消息:', message);
                 // 清理之前的tool events和UI状态
@@ -1190,7 +1200,11 @@ function initInputHandler() {
                 
                 // 清理右侧内容
                 try {cleanupAllResources();} catch (_) { }
-                messageService.sendMessage(message);
+                if (endsWithMultiSpaces && window.messageService && typeof window.messageService.sendReplay === 'function') {
+                    window.messageService.sendReplay();
+                } else {
+                    messageService.sendMessage(message);
+                }
                 // 清空输入框
                 messageInput.value = '';
             }
@@ -1199,7 +1213,7 @@ function initInputHandler() {
         // 点击发送按钮
         sendButton.addEventListener('click', sendMessage);
 
-        // 按回车键发送
+        // 按回车键发送（同样处理尾部空格触发回放）
         messageInput.addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
                 sendMessage();
@@ -1217,12 +1231,35 @@ function initInputHandler() {
         });
     }
 
+    // 绑定回放按钮
+    if (replayButton) {
+        replayButton.addEventListener('click', function () {
+            try {
+                credibilityService.clearCredibilityData();
+            } catch (_) {}
+            try {
+                // 关闭现有面板与清理资源，尽量与发送一致
+                if (nodeToolPanels && nodeToolPanels.size > 0) {
+                    const panelIds = Array.from(nodeToolPanels.keys());
+                    panelIds.forEach(nodeId => { try { closeNodeToolPanel(nodeId); } catch (_) {} });
+                    if (nodeToolPanels.clear) nodeToolPanels.clear();
+                }
+                try { cleanupAllResources(); } catch (_) {}
+            } catch (_) {}
+            if (window.messageService && typeof window.messageService.sendReplay === 'function') {
+                window.messageService.sendReplay();
+            }
+        });
+    }
+
     // 初始化输入框处理
     if (initialMessageInput && initialSendButton) {
         // 发送初始消息函数
         function sendInitialMessage() {
             credibilityService.clearCredibilityData();
-            const message = initialMessageInput.value.trim();
+            const raw = initialMessageInput.value;
+            const endsWithMultiSpaces = /\s{2,}$/.test(raw);
+            const message = raw.trim();
             
             // 新会话开始：优先清空缓存并关闭所有已打开的step面板
             try {
@@ -1243,11 +1280,16 @@ function initInputHandler() {
                 }
             } catch (_) {}
             
-            // if (message) {
             console.log('发送初始消息:', message);
             // 隐藏初始输入框并显示主界面
             hideInitialInputAndShowMain(message);
-            // }
+            // 根据末尾空格决定回放还是正常请求
+            try { cleanupAllResources(); } catch (_) {}
+            if (endsWithMultiSpaces && window.messageService && typeof window.messageService.sendReplay === 'function') {
+                window.messageService.sendReplay();
+            } else if (window.messageService && typeof window.messageService.sendMessage === 'function' && message) {
+                window.messageService.sendMessage(message);
+            }
         }
 
         // 点击发送按钮
@@ -1286,13 +1328,7 @@ function hideInitialInputAndShowMain(message) {
         // 延迟显示主界面，让过渡动画更流畅
         setTimeout(() => {
             middleContainer.classList.add('show');
-            // 处理用户消息
-            if (message) {
-                messageService.sendMessage(message);
-            } else {
-                // todo 消息为空时，进入主界面调试
-                // startSimulateWorkflow();
-            }
+            // 仅负责界面切换；消息发送交由调用方控制
         }, 300); // 等待初始输入框的隐藏动画完成
     }
 }

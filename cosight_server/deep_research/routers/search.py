@@ -345,6 +345,12 @@ async def search(request: Request, params: Any = Body(None)):
         plan_queue = asyncio.Queue()
         main_loop = asyncio.get_running_loop()
 
+        # 构造路径：/xxx/xxx/work_space/work_space_时间戳
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        work_space_path_time = os.path.join(work_space_path, f'work_space_{timestamp}')
+        print(f"work_space_path_time:{work_space_path_time}")
+        os.makedirs(work_space_path_time, exist_ok=True)
+
         # 保存最新的plan数据（仅非工具事件）
         latest_plan = None
         # 本次会话内已触发可信分析的步骤集合，避免重复分析
@@ -483,20 +489,15 @@ async def search(request: Request, params: Any = Body(None)):
         # 在子线程中执行CoSight任务（若未在运行）
         def run_manus():
             try:
+                # 避免进程级环境变量被并发覆盖，优先通过参数传递
+                os.environ['WORKSPACE_PATH'] = work_space_path_time
+                
                 # 订阅事件，关联plan_id
                 plan_report_event_manager.subscribe("plan_created", plan_id, append_create_plan_local)
                 plan_report_event_manager.subscribe("plan_updated", plan_id, append_create_plan_local)
                 plan_report_event_manager.subscribe("plan_process", plan_id, append_create_plan_local)
                 plan_report_event_manager.subscribe("plan_result", plan_id, append_create_plan_local)
                 plan_report_event_manager.subscribe("tool_event",plan_id, append_create_plan_local)
-
-                # 构造路径：/xxx/xxx/work_space/work_space_时间戳
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-                work_space_path_time = os.path.join(work_space_path, f'work_space_{timestamp}')
-                print(f"work_space_path_time:{work_space_path_time}")
-                os.makedirs(work_space_path_time, exist_ok=True)
-                # 避免进程级环境变量被并发覆盖，优先通过参数传递
-                os.environ['WORKSPACE_PATH'] = work_space_path_time
 
                 # 初始化CoSight并传入plan_id
                 logger.info(f"llm is {llm_for_plan.model}, {llm_for_plan.base_url}, {llm_for_plan.api_key}")
@@ -737,7 +738,121 @@ async def search(request: Request, params: Any = Body(None)):
             }, ensure_ascii=False).encode('utf-8') + b'\n'
             yield error_response
 
+    async def RecordGenerator(workspace_path=None):
+        """两种模式的生成器：
+        - 记录模式（默认）：将 generate_stream_response 产生的每一行写入当前 WORKSPACE_PATH 下的 replay.json，同时正常向前端 yield
+        - 回放模式：从 replay.json 读取历史数据，按行每 2 秒 yield 一次
+        
+        回放模式触发条件：params 中存在键 'replay' 且为真值
+        """
+        try:
+            replay_mode = bool(params.get("replay", False)) if isinstance(params, dict) else False
+        except Exception:
+            replay_mode = False
+
+        # 获取当前会话的 workspace 目录（优先使用调用方显式传入的重放目录）
+        explicit_workspace = None
+        try:
+            if isinstance(params, dict):
+                explicit_workspace = params.get('replayWorkspace')
+        except Exception:
+            explicit_workspace = None
+        
+        # 对于新任务，使用与 run_manus 相同的工作空间路径
+        if not replay_mode and not explicit_workspace:
+            # 优先使用传入的工作空间路径
+            if workspace_path:
+                curr_workspace = workspace_path
+            else:
+                # 尝试从环境变量获取工作空间路径
+                try:
+                    curr_workspace = os.environ.get('WORKSPACE_PATH')
+                except Exception:
+                    curr_workspace = None
+                if not curr_workspace:
+                    # 生成与 run_manus 相同的时间戳工作空间路径
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                    curr_workspace = os.path.join(work_space_path, f'work_space_{timestamp}')
+        elif explicit_workspace and isinstance(explicit_workspace, str) and len(explicit_workspace) > 0:
+            curr_workspace = explicit_workspace
+        else:
+            try:
+                curr_workspace = os.environ.get('WORKSPACE_PATH')
+            except Exception:
+                curr_workspace = None
+            if not curr_workspace:
+                curr_workspace = work_space_path
+
+        replay_file_path = None
+        if curr_workspace:
+            try:
+                os.makedirs(curr_workspace, exist_ok=True)
+                replay_file_path = os.path.join(curr_workspace, 'replay.json')
+            except Exception:
+                replay_file_path = None
+
+        if replay_mode:
+            # 回放模式：逐行读取历史记录
+            try:
+                print(f"Replay file path: {replay_file_path}")
+                replay_file_path='work_space/work_space_20250926_202755_412701/replay.json'
+                if replay_file_path and os.path.exists(replay_file_path):
+                    with open(replay_file_path, 'r', encoding='utf-8') as rf:
+                        for line in rf:
+                            line = line.rstrip('\n')
+                            if not line:
+                                await asyncio.sleep(1)
+                                continue
+                            try:
+                                yield line.encode('utf-8') + b'\n'
+                            except Exception:
+                                # 如果编码失败，忽略该行
+                                pass
+                            await asyncio.sleep(1)
+                    return
+                else:
+                    # 没有历史回放文件，输出一条提示信息
+                    fallback = {
+                        "contentType": "lui-message-manus-step",
+                        "sessionInfo": params.get("sessionInfo", {}) if isinstance(params, dict) else {},
+                        "code": 0,
+                        "message": "no replay file",
+                        "task": "chat",
+                        "changeType": "replace",
+                        "content": {"title": "回放文件不存在", "steps": [], "statusText": "无可回放内容"}
+                    }
+                    yield json.dumps(fallback, ensure_ascii=False).encode('utf-8') + b'\n'
+                    return
+            except Exception as e:
+                logger.error(f"回放模式失败: {e}", exc_info=True)
+                # 回退到记录模式
+                replay_mode = False
+
+        # 记录模式：包裹现有流并写入文件
+        async for chunk in generate_stream_response(generator_func, params):
+            try:
+                if replay_file_path:
+                    try:
+                        # chunk 为 bytes，直接解码并按行写入
+                        text = chunk.decode('utf-8')
+                    except Exception:
+                        try:
+                            text = str(chunk)
+                        except Exception:
+                            text = ''
+                    if text:
+                        with open(replay_file_path, 'a', encoding='utf-8') as wf:
+                            # 统一确保每条记录以换行结束
+                            if text.endswith('\n'):
+                                wf.write(text)
+                            else:
+                                wf.write(text + '\n')
+            except Exception as _e:
+                logger.error(f"写入回放文件失败: {_e}", exc_info=True)
+
+            yield chunk
+
     return StreamingResponse(
-        generate_stream_response(generator_func, params),
+        RecordGenerator(),
         media_type="application/json"
     )

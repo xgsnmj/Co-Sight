@@ -162,6 +162,33 @@ async def _send_resp(websocket, cookie, topic, message, lang):
         "stream": True,
         "contentProperties": message.get("extra", {}).get("fromBackEnd", {}).get("actualPrompt")
     }
+    # 支持回放控制字段：replay、replayWorkspace、replayPlanId
+    try:
+        extra = message.get("extra", {}) or {}
+        from_back_end = (extra.get("fromBackEnd") or {}) if isinstance(extra, dict) else {}
+        # 允许两处读取：extra.replay / extra.fromBackEnd.replay
+        replay_flag = extra.get("replay")
+        if replay_flag is None:
+            replay_flag = from_back_end.get("replay")
+        if isinstance(replay_flag, bool) and replay_flag:
+            params["replay"] = True
+
+        # 显式传入要回放的 workspace 目录（包含 replay.json）
+        replay_workspace = extra.get("replayWorkspace")
+        if replay_workspace is None:
+            replay_workspace = from_back_end.get("replayWorkspace")
+        if isinstance(replay_workspace, str) and replay_workspace:
+            params["replayWorkspace"] = replay_workspace
+
+        # 使用既有的 planId（对应 messageSerialNumber）避免新建 topic / 计划
+        replay_plan_id = extra.get("replayPlanId")
+        if replay_plan_id is None:
+            replay_plan_id = from_back_end.get("replayPlanId")
+        if isinstance(replay_plan_id, str) and replay_plan_id:
+            # 不覆盖现有 sessionId；仅设置 messageSerialNumber 以复用历史文件名
+            params.setdefault("sessionInfo", {})["messageSerialNumber"] = replay_plan_id
+    except Exception:
+        pass
     url = f'http://127.0.0.1:{custom_config.get("search_port")}{custom_config.get("base_api_url")}/deep-research/search'
     headers = {
         "content-type": "application/json;charset=utf-8",
@@ -189,8 +216,10 @@ async def _stream_handler(params, url, headers, topic, websocket):
     
     # 设置读取超时为无限，避免长时间无数据导致 TimeoutError
     timeout = aiohttp.ClientTimeout(sock_read=None, total=None)
-    sessionInfo =params.get('sessionInfo', {})
-    sessionInfo['messageSerialNumber'] = msg_uuid
+    sessionInfo = params.get('sessionInfo', {})
+    # 若未显式指定回放的 planId，则为本次新流生成 messageSerialNumber
+    if not sessionInfo.get('messageSerialNumber'):
+        sessionInfo['messageSerialNumber'] = msg_uuid
     params['sessionInfo'] = sessionInfo
     # 设置连接器，提高连接池限制
     connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)

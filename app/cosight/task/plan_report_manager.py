@@ -46,8 +46,12 @@ class EventManager:
                 if event_type in self._subscribers and plan_id in self._subscribers[event_type]:
                     callbacks = self._subscribers[event_type][plan_id].copy()
 
+            # 对于工具事件，使用同步调用确保顺序
             for callback in callbacks:
-                self._executor.submit(self._safe_callback, callback, event_data)
+                try:
+                    callback(event_data)
+                except Exception as e:
+                    logger.error(f"工具事件回调执行失败: {e}", exc_info=True)
             return
         
         # 原有的Plan对象处理逻辑

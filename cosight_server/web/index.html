@@ -13,6 +13,13 @@
 
     <link rel="stylesheet" href="styles/styles.css">
     <link rel="stylesheet" href="styles/md.css">
+    
+    <!-- 页面刷新时清空localStorage -->
+    <script>
+        // 页面刷新时清空localStorage中的所有内容
+        localStorage.clear();
+        console.log('页面刷新，已清空localStorage');
+    </script>
 </head>
 
 <body>
@@ -137,6 +144,9 @@
                             <input type="text" class="input-field" placeholder="请输入你的任务..." id="message-input">
                             <button class="send-button" id="send-button">
                                 <i class="fas fa-paper-plane"></i>
+                            </button>
+                            <button class="send-button" id="replay-button" title="回放上次会话">
+                                <i class="fas fa-rotate-left"></i>
                             </button>
                         </div>
                     </div>

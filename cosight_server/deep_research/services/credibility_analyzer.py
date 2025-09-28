@@ -56,53 +56,56 @@ class CredibilityAnalyzer:
             return None
     
     def _get_credibility_prompt(self, step_content: str, all_steps_content: str, tool_events_summary: str, tool_events_json: str) -> str:
-        """生成可信信息分析的prompt，包含工具摘要与工具原始结果（JSON 精简）。"""
-        return f"""你是一个专业的信息可信度分析师。请分析以下步骤执行结果，并按照5种可信度类型进行总结。
+        """生成可信信息分析的prompt，关注工具结果内容而非调用过程。"""
+        return f"""你是一个专业的信息可信度分析师。请基于以下工具执行结果中获取的具体信息内容，按照5种可信度类型进行总结。
 
-**分析内容：**
-当前步骤内容：{step_content}
+**任务背景：**
+当前步骤：{step_content}
+已完成步骤：{all_steps_content}
 
-所有已完成步骤内容：{all_steps_content}
-
-相关工具调用与结果摘要：
+**工具执行结果内容：**
 {tool_events_summary}
 
-相关工具调用的原始输出（JSON，已精简字段与长度）：
+**详细结果数据：**
 ```json
 {tool_events_json}
 ```
+
+**分析要求：**
+请从上述工具结果中提取出与任务相关的具体信息内容，按照以下可信度类型进行分类总结。重点关注工具返回的实际数据、事实、观点等有价值的信息，而不是工具调用过程本身。
 
 **可信度分类定义：**
 
 1. **常识或者真理 (Truth/Common Sense)**
    - 定义：被广泛接受的基础事实和逻辑真理
    - 特征：无需验证、普遍认可、逻辑自洽
-   - 示例：数学公式、物理定律、基本逻辑关系
+
 
 2. **给定或者已验证的事实 (Given/Verified Facts)**
-   - 定义：来自权威来源、已通过验证的明确事实
-   - 特征：问题要求、PDF文件、官方文档、权威数据
-   - 示例：官方统计数据、学术论文、政府报告
+   - 定义：来自权威来源或已通过不同信息源反复验证的明确事实
+   - 特征：官方文档、权威数据、PDF文件、学术论文
 
-3. **需要查找的事实 (Searchable Facts)**
-   - 定义：需要通过网络搜索或数据库查询获取的事实
-   - 特征：百度、Wikipedia、Google搜索、网页内容
-   - 示例：最新新闻、实时数据、网络信息
 
-4. **需要推导的事实 (Derived Facts)**
-   - 定义：基于已知事实通过逻辑推理得出的结论
-   - 特征：基于搜索结果的推理、时间推理、逻辑分析
-   - 示例：趋势分析、因果关系、预测结果
+3. **查找的事实 (Searchable Facts)**
+   - 定义：通过网络搜索或数据库查询获取的事实信息
+   - 特征：搜索结果、网页内容、实时数据、最新信息
+
+
+4. **推导的事实 (Derived Facts)**
+   - 定义：基于获取的信息通过逻辑推理得出的结论
+   - 特征：基于数据的分析、趋势推断、因果关系
+
 
 5. **有根据的猜测 (Educated Guess)**
-   - 定义：基于有限信息做出的合理推测
-   - 特征：网页评论、模糊信息、不确定来源
-   - 示例：专家观点、市场预测、可能性分析
+   - 定义：基于有限信息做出的合理推测和观点
+   - 特征：专家观点、市场预测、可能性分析
 
-**任务要求：**
-1) 面向结论输出，每类至少1条、至多2条，单句不超过50字；
-2) 当证据不足也需给出最合理的结论性表述，并在句末注明依据（如：来自“给定资料/工具结果/逻辑推断”）。
-3) 避免空泛与重复，确保对用户有直接价值。
+
+**输出要求：**
+1) 每类至少1条、至多2条，单句不超过50字
+2) 重点描述从工具结果中提取的具体信息内容，而非工具调用过程
+3) 在句末注明信息来源（如：来自"搜索结果/官方数据/专家分析"）
+4) 确保信息对用户任务有直接价值和指导意义，避免重复、冗余、无关信息
 
 **输出格式（严格按此JSON格式）：**
 ```json
@@ -356,7 +359,7 @@ class CredibilityAnalyzer:
                 lst.append(fallback[:50])
 
         ensure_line(safe_result["truth"], f"与“{step_title}”相关常识：先满足依赖再执行（逻辑）")
-        ensure_line(safe_result["verified_facts"], f"已确认：{(step_notes or '来源于步骤记录/工具结果')}（已验证）")
+        ensure_line(safe_result["verified_facts"], f"已确认：{(step_notes or '根据当前步骤，暂无给定或者已验证的事实')}")
         ensure_line(safe_result["searchable_facts"], f"仍需检索：补充“{step_title}”的权威数据与最新动态（搜索）")
         ensure_line(safe_result["derived_facts"], f"推导：完成“{step_title}”降低后续不确定性（推理）")
         ensure_line(safe_result["educated_guess"], f"估计：{('工具显示' + tools_hint) if tools_hint else '依据上下文保守判断'}（猜测）")
