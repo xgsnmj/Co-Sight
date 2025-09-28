@@ -45,6 +45,11 @@ import io
 
 from app.common.logger_util import logger
 
+# 内容处理常量
+MAX_CONTENT_LENGTH = 8000  # 单次LLM调用的最大内容长度
+MAX_FILE_PREVIEW_LENGTH = 1000  # 文件预览的最大长度
+SUMMARY_LENGTH = 500  # 摘要的最大长度
+
 # 字体配置函数
 def configure_matplotlib_fonts():
     """配置matplotlib字体，确保中文显示正确"""
@@ -139,6 +144,121 @@ class HtmlVisualizationToolkit:
         
         logger.info(f"共找到 {len(text_files)} 个文本文件")
         return text_files
+    
+    def summarize_content(self, content, max_length=SUMMARY_LENGTH):
+        """智能摘要内容，保留关键信息"""
+        if len(content) <= max_length:
+            return content
+        
+        try:
+            # 判断是否为中文内容
+            is_chinese = bool(re.search(r'[\u4e00-\u9fff]', content))
+            
+            if is_chinese:
+                prompt = f"""请对以下内容进行智能摘要，保留所有关键信息、数据和重要细节，但将长度控制在{max_length}字符以内：
+
+{content}
+
+要求：
+1. 保留所有数字、统计数据、关键事实
+2. 保留重要的结论和发现
+3. 保持逻辑结构清晰
+4. 使用简洁但完整的语言
+5. 不要遗漏任何重要信息
+
+请直接返回摘要内容，不要添加任何前缀或说明。"""
+            else:
+                prompt = f"""Please provide an intelligent summary of the following content, retaining all key information, data, and important details, but keeping the length within {max_length} characters:
+
+{content}
+
+Requirements:
+1. Retain all numbers, statistical data, and key facts
+2. Retain important conclusions and findings
+3. Maintain clear logical structure
+4. Use concise but complete language
+5. Do not omit any important information
+
+Please return the summary content directly without any prefixes or explanations."""
+            
+            response = self.ask_llm(prompt)
+            if response and len(response.strip()) > 0:
+                return response.strip()
+            else:
+                # 如果LLM摘要失败，使用简单的截断
+                return content[:max_length] + "..."
+        except Exception as e:
+            logger.error(f"内容摘要失败: {str(e)}")
+            return content[:max_length] + "..."
+    
+    def chunk_content(self, content, max_chunk_size=MAX_CONTENT_LENGTH):
+        """将长内容分块处理"""
+        if len(content) <= max_chunk_size:
+            return [content]
+        
+        chunks = []
+        current_chunk = ""
+        
+        # 按段落分割
+        paragraphs = content.split('\n\n')
+        
+        for paragraph in paragraphs:
+            # 如果单个段落就超过最大长度，需要进一步分割
+            if len(paragraph) > max_chunk_size:
+                # 先处理当前块
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = ""
+                
+                # 分割长段落
+                sentences = paragraph.split('。')
+                for sentence in sentences:
+                    if len(current_chunk + sentence + '。') > max_chunk_size:
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                        current_chunk = sentence + '。'
+                    else:
+                        current_chunk += sentence + '。'
+            else:
+                # 检查添加这个段落是否会超过限制
+                if len(current_chunk + '\n\n' + paragraph) > max_chunk_size:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = paragraph
+                else:
+                    if current_chunk:
+                        current_chunk += '\n\n' + paragraph
+                    else:
+                        current_chunk = paragraph
+        
+        # 添加最后一个块
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        return chunks
+    
+    def process_content_for_llm(self, content, context_type="general"):
+        """为LLM调用准备内容，自动处理长度限制"""
+        if len(content) <= MAX_CONTENT_LENGTH:
+            return content
+        
+        logger.info(f"内容长度 {len(content)} 超过限制 {MAX_CONTENT_LENGTH}，进行智能处理")
+        
+        if context_type == "outline":
+            # 对于大纲生成，使用摘要
+            return self.summarize_content(content, MAX_CONTENT_LENGTH)
+        elif context_type == "reorganize":
+            # 对于内容重组，使用分块
+            chunks = self.chunk_content(content, MAX_CONTENT_LENGTH)
+            if len(chunks) == 1:
+                return chunks[0]
+            else:
+                # 如果内容被分块，返回第一个块并记录警告
+                logger.warning(f"内容被分为 {len(chunks)} 块，使用第一块进行处理")
+                return chunks[0]
+        else:
+            # 默认使用摘要
+            return self.summarize_content(content, MAX_CONTENT_LENGTH)
     
     def ask_llm(self, prompt):
         """通过LLM获取回答"""
@@ -414,7 +534,14 @@ class HtmlVisualizationToolkit:
         logger.info("正在生成报告大纲...")
         all_content = ""
         for file in text_files:
-            all_content += f"文件名: {file['filename']}\n内容预览: {file['content'][:500]}...\n\n"
+            # 使用更智能的内容预览，而不是简单的截断
+            content_preview = file['content'][:MAX_FILE_PREVIEW_LENGTH]
+            if len(file['content']) > MAX_FILE_PREVIEW_LENGTH:
+                content_preview += "..."
+            all_content += f"文件名: {file['filename']}\n内容预览: {content_preview}\n\n"
+        
+        # 使用内容处理机制来避免上下文过长
+        processed_content = self.process_content_for_llm(all_content, "outline")
         
         # 判断用户查询的语言
         is_chinese = bool(re.search(r'[\u4e00-\u9fff]', user_query)) if user_query else True
@@ -428,7 +555,7 @@ class HtmlVisualizationToolkit:
 请使用中文生成大纲，确保大纲逻辑连贯，涵盖所有重要信息，并适合转化为专业报告。
 
 文件内容：
-{all_content}
+{processed_content}
 
 请以JSON格式返回大纲，格式如下：
 {{
@@ -460,7 +587,7 @@ class HtmlVisualizationToolkit:
 Please generate the outline in English, ensuring that the outline is logically coherent, covers all important information, and is suitable for conversion into a professional report.
 
 File content:
-{all_content}
+{processed_content}
 
 Please return the outline in JSON format as follows:
 {{
@@ -613,6 +740,9 @@ Note: content_from should indicate which files the content for that subsection s
                         if filename in filename_to_content:
                             relevant_content += filename_to_content[filename] + "\n\n"
                 
+                # 使用内容处理机制来避免上下文过长
+                processed_relevant_content = self.process_content_for_llm(relevant_content, "reorganize")
+                
                 # 根据用户查询语言选择合适的提示语
                 if is_chinese:
                     prompt = f"""请根据以下原始内容撰写一个关于"{subsection['title']}"的子章节内容。内容应该是连贯的，格式良好的段落，尽量提取和组织所有相关的信息，尽量保留数据相关的原始内容，请确保数据和内容完全与原始内容一致，不要篡改。
@@ -629,7 +759,7 @@ Note: content_from should indicate which files the content for that subsection s
 同时请确保不要在内容开头重复子章节的标题，这会导致标题重复显示。
 
 原始内容:
-{relevant_content}
+{processed_relevant_content}
 
 返回内容应该是结构良好的Markdown文本，每个段落都应该是完整的句子，且长度适当。
 注意：直接从正文内容开始撰写，必须使用中文撰写内容。
@@ -649,7 +779,7 @@ Note: Output Markdown content directly, without wrapping it in code blocks (e.g.
 Also make sure not to repeat the subsection title at the beginning of the content, as this will cause the title to be displayed twice.
 
 Original content:
-{relevant_content}
+{processed_relevant_content}
 
 The returned content should be well-structured Markdown text, with complete sentences in each paragraph and appropriate length.
 Note: Start writing directly from the body content, and you must write the content in English.

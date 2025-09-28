@@ -71,15 +71,14 @@ def _file_path_to_url(path_value: str) -> str:
             from cosight_server.sdk.common.config import custom_config
             base_url = str(custom_config.get("base_api_url"))
         except Exception:
-            base_url = ""
+            # 如果配置未初始化，使用默认值
+            base_url = "/api/nae-deep-research/v1"
 
-        # 不对文件名进行编码，保持原始文件名
-        # parts = relative.split("/")
-        # if len(parts) >= 2:
-        #     # 对文件名进行 quote，目录不编码
-        #     if parts[-1]:
-        #         parts[-1] = quote(parts[-1])
-        #     relative = "/".join(parts)
+        # 对文件名进行URL编码，确保中文字符正确处理
+        parts = relative.split("/")
+        if len(parts) >= 2:
+
+            relative = "/".join(parts)
 
         return f"{base_url}/{relative}"
     except Exception:
@@ -113,9 +112,23 @@ def _rewrite_paths_in_payload(payload):
         return payload
 
 async def _trigger_credibility_analysis(plan_queue, plan_data: Plan, completed_step: str):
-    """触发可信分析"""
+    """触发可信分析 - 异步执行，不阻塞主流程"""
+    
+    # 立即检查并继续执行下一步骤，不等待可信分析
+    await _check_and_continue_next_step(plan_queue, plan_data)
+    
+    # 异步执行可信分析，不阻塞主流程
     try:
-        logger.info(f"开始可信分析: {completed_step}")
+        logger.info(f"准备创建可信分析任务: {completed_step}")
+        task = asyncio.create_task(_async_credibility_analysis(plan_queue, plan_data, completed_step))
+        logger.info(f"可信分析任务已创建: {completed_step}")
+    except Exception as e:
+        logger.error(f"创建可信分析任务失败: {e}", exc_info=True)
+
+async def _async_credibility_analysis(plan_queue, plan_data: Plan, completed_step: str):
+    """异步执行可信分析"""
+    try:
+        logger.info(f"开始异步可信分析: {completed_step}")
         
         # 获取当前步骤信息
         current_step = {
@@ -146,7 +159,7 @@ async def _trigger_credibility_analysis(plan_queue, plan_data: Plan, completed_s
                             "timestamp": tool_call.get("timestamp", "")
                         })
         
-        # 调用可信分析器
+        # 调用可信分析器（在异步任务中执行）
         credibility_result = await credibility_analyzer.analyze_step_credibility(
             current_step, all_completed_steps, tool_events
         )
@@ -170,19 +183,12 @@ async def _trigger_credibility_analysis(plan_queue, plan_data: Plan, completed_s
                     payload_len = len(_json.dumps(credibility_message, ensure_ascii=False))
                 except Exception:
                     payload_len = -1
-                logger.info(f"可信分析完成，已推送到队列 step={completed_step}, bytes~={payload_len}")
-                
-                # 可信分析完成后，主动检查并继续执行下一步骤
-                await _check_and_continue_next_step(plan_queue, plan_data)
+                logger.info(f"异步可信分析完成，已推送到队列 step={completed_step}, bytes~={payload_len}")
         else:
-            logger.info(f"可信分析无结果: {completed_step}")
-            # 即使没有可信分析结果，也要检查下一步骤
-            await _check_and_continue_next_step(plan_queue, plan_data)
+            logger.info(f"异步可信分析无结果: {completed_step}")
         
     except Exception as e:
-        logger.error(f"可信分析失败: {e}", exc_info=True)
-        # 可信分析失败时，也要检查下一步骤
-        await _check_and_continue_next_step(plan_queue, plan_data)
+        logger.error(f"异步可信分析失败: {e}", exc_info=True)
 
 async def _check_and_continue_next_step(plan_queue, plan_data: Plan):
     """检查并继续执行下一个步骤"""
@@ -203,7 +209,7 @@ async def _check_and_continue_next_step(plan_queue, plan_data: Plan):
     except Exception as e:
         logger.error(f"检查下一步骤失败: {e}", exc_info=True)
 
-def append_create_plan(data: Any):
+async def append_create_plan(data: Any):
     """
     将数据追加写入LOGS_PATH下的plan.log文件，并将数据放入队列以发送给客户端
 
@@ -281,11 +287,12 @@ def append_create_plan(data: Any):
                         if status == 'completed' and step not in analyzed_steps:
                             # 标记为已分析
                             analyzed_steps.add(step)
-                            # 异步触发可信分析
-                            asyncio.run_coroutine_threadsafe(
-                                _trigger_credibility_analysis(plan_queue, data, step), 
-                                main_loop
-                            )
+                            # 异步触发可信分析 - 使用run_coroutine_threadsafe避免阻塞
+                            try:
+                                # 使用run_coroutine_threadsafe调用异步函数
+                                asyncio.run_coroutine_threadsafe(_trigger_credibility_analysis(plan_queue, data, step), main_loop)
+                            except Exception as e:
+                                logger.error(f"触发可信分析失败: {e}", exc_info=True)
                             logger.info(f"触发可信分析: {step}")
             else:
                 asyncio.run_coroutine_threadsafe(plan_queue.put(data), main_loop)
@@ -340,16 +347,20 @@ async def search(request: Request, params: Any = Body(None)):
     plan_log_path = os.path.join(LOGS_PATH, f"{plan_id}.log")
     plan_final_path = os.path.join(LOGS_PATH, f"{plan_id}.final.json")
 
+    # 构造路径：/xxx/xxx/work_space/work_space_时间戳
+    # 在函数外部生成，确保RecordGenerator和generator_func使用相同路径
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+    work_space_path_time = os.path.join(work_space_path, f'work_space_{timestamp}')
+    print(f"work_space_path_time:{work_space_path_time}")
+    os.makedirs(work_space_path_time, exist_ok=True)
+    
+    # 将工作空间路径存储到环境变量，供RecordGenerator使用
+    os.environ['WORKSPACE_PATH'] = work_space_path_time
+
     async def generator_func():
         # 清空之前可能存在的队列数据并保存当前事件循环
         plan_queue = asyncio.Queue()
         main_loop = asyncio.get_running_loop()
-
-        # 构造路径：/xxx/xxx/work_space/work_space_时间戳
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-        work_space_path_time = os.path.join(work_space_path, f'work_space_{timestamp}')
-        print(f"work_space_path_time:{work_space_path_time}")
-        os.makedirs(work_space_path_time, exist_ok=True)
 
         # 保存最新的plan数据（仅非工具事件）
         latest_plan = None
@@ -396,10 +407,12 @@ async def search(request: Request, params: Any = Body(None)):
                             for step, status in plan_obj.step_statuses.items():
                                 if status == 'completed' and step not in analyzed_steps_local:
                                     analyzed_steps_local.add(step)
-                                    asyncio.run_coroutine_threadsafe(
-                                        _trigger_credibility_analysis(plan_queue, plan_obj, step),
-                                        main_loop
-                                    )
+                                    # 异步触发可信分析 - 使用run_coroutine_threadsafe避免阻塞
+                                    try:
+                                        # 使用run_coroutine_threadsafe调用异步函数
+                                        asyncio.run_coroutine_threadsafe(_trigger_credibility_analysis(plan_queue, plan_obj, step), main_loop)
+                                    except Exception as e:
+                                        logger.error(f"触发可信分析失败: {e}", exc_info=True)
                                     logger.info(f"触发可信分析(本地队列): {step}")
                     except Exception as _e:
                         logger.error(f"触发可信分析失败: {_e}", exc_info=True)
@@ -410,7 +423,7 @@ async def search(request: Request, params: Any = Body(None)):
                         data = _rewrite_paths_in_payload(data)
                     except Exception:
                         pass
-                    logger.info(f"Tool event: {data.get('event_type')} for {data.get('tool_name')}")
+                    logger.info(f"Tool event received: {data.get('event_type')} for {data.get('tool_name')} at step {data.get('step_index')}")
 
                 # 准备写入内容（自动处理不同类型）
                 if isinstance(data, (dict, list)):
@@ -443,11 +456,15 @@ async def search(request: Request, params: Any = Body(None)):
                 # 将数据放入队列以便流式发送
                 if plan_queue is not None and main_loop is not None:
                     if isinstance(data, Plan):
+                        logger.info(f"Pushing Plan data to queue for plan_id: {plan_id}")
                         asyncio.run_coroutine_threadsafe(plan_queue.put(plan_dict), main_loop)
                     else:
                         # 非Plan（包括工具事件）在入队前再做一次路径改写兜底
                         safe_data = _rewrite_paths_in_payload(data)
+                        logger.info(f"Pushing non-Plan data to queue: {type(data).__name__} for plan_id: {plan_id}")
                         asyncio.run_coroutine_threadsafe(plan_queue.put(safe_data), main_loop)
+                else:
+                    logger.warning(f"Queue or main_loop is None, cannot push data for plan_id: {plan_id}")
 
             except json.JSONDecodeError as e:
                 logger.error(f"JSON序列化失败: {e}", exc_info=True)
@@ -492,12 +509,14 @@ async def search(request: Request, params: Any = Body(None)):
                 # 避免进程级环境变量被并发覆盖，优先通过参数传递
                 os.environ['WORKSPACE_PATH'] = work_space_path_time
                 
-                # 订阅事件，关联plan_id
+                # 先订阅事件，关联plan_id - 确保在CoSight初始化之前完成订阅
+                logger.info(f"Subscribing to events for plan_id: {plan_id}")
                 plan_report_event_manager.subscribe("plan_created", plan_id, append_create_plan_local)
                 plan_report_event_manager.subscribe("plan_updated", plan_id, append_create_plan_local)
                 plan_report_event_manager.subscribe("plan_process", plan_id, append_create_plan_local)
                 plan_report_event_manager.subscribe("plan_result", plan_id, append_create_plan_local)
-                plan_report_event_manager.subscribe("tool_event",plan_id, append_create_plan_local)
+                plan_report_event_manager.subscribe("tool_event", plan_id, append_create_plan_local)
+                logger.info(f"Event subscription completed for plan_id: {plan_id}")
 
                 # 初始化CoSight并传入plan_id
                 logger.info(f"llm is {llm_for_plan.model}, {llm_for_plan.base_url}, {llm_for_plan.api_key}")
@@ -528,6 +547,7 @@ async def search(request: Request, params: Any = Body(None)):
         # 幂等：若已在运行，仅订阅并复用已有执行；否则启动新执行
         if TaskManager.is_running(plan_id):
             # 仅订阅，将当前请求的队列作为新的监听者
+            logger.info(f"Task already running for plan_id: {plan_id}, subscribing to events")
             plan_report_event_manager.subscribe("plan_created", plan_id, append_create_plan_local)
             plan_report_event_manager.subscribe("plan_updated", plan_id, append_create_plan_local)
             plan_report_event_manager.subscribe("plan_process", plan_id, append_create_plan_local)
@@ -535,6 +555,7 @@ async def search(request: Request, params: Any = Body(None)):
             plan_report_event_manager.subscribe("tool_event", plan_id, append_create_plan_local)
         else:
             TaskManager.mark_running(plan_id)
+            logger.info(f"Starting new task for plan_id: {plan_id}")
             import threading
             thread = threading.Thread(target=run_manus)
             thread.daemon = True
@@ -572,7 +593,8 @@ async def search(request: Request, params: Any = Body(None)):
 
                 # 工具事件（裸 dict），直接透传且不更新latest_plan（避免保活重复发送工具事件）
                 if isinstance(data, dict) and data.get("event_type") in ["tool_start", "tool_complete", "tool_error"]:
-                    yield {"plan": data}
+                    # 工具事件直接透传，不包装在plan中
+                    yield data
                     continue
 
                 # 计划结果完成
@@ -652,11 +674,10 @@ async def search(request: Request, params: Any = Body(None)):
                         "changeType": "append",
                         "content": response_data
                     }
-                # 工具事件（被包裹在plan中），注意空值判断
+                # 工具事件（直接透传），注意空值判断
                 elif (
                     isinstance(response_data, dict)
-                    and isinstance(response_data.get("plan"), dict)
-                    and response_data.get("plan", {}).get("event_type") in ["tool_start", "tool_complete", "tool_error"]
+                    and response_data.get("event_type") in ["tool_start", "tool_complete", "tool_error"]
                 ):
                     try:
                         logger.info("发送工具事件到前端")
@@ -760,19 +781,20 @@ async def search(request: Request, params: Any = Body(None)):
         
         # 对于新任务，使用与 run_manus 相同的工作空间路径
         if not replay_mode and not explicit_workspace:
-            # 优先使用传入的工作空间路径
-            if workspace_path:
+            # 优先使用环境变量中的工作空间路径（由generator_func设置）
+            try:
+                curr_workspace = os.environ.get('WORKSPACE_PATH')
+            except Exception:
+                curr_workspace = None
+            
+            # 如果环境变量中没有，则使用传入的工作空间路径
+            if not curr_workspace and workspace_path:
                 curr_workspace = workspace_path
-            else:
-                # 尝试从环境变量获取工作空间路径
-                try:
-                    curr_workspace = os.environ.get('WORKSPACE_PATH')
-                except Exception:
-                    curr_workspace = None
-                if not curr_workspace:
-                    # 生成与 run_manus 相同的时间戳工作空间路径
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-                    curr_workspace = os.path.join(work_space_path, f'work_space_{timestamp}')
+            
+            # 如果都没有，则生成新的时间戳工作空间路径
+            if not curr_workspace:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                curr_workspace = os.path.join(work_space_path, f'work_space_{timestamp}')
         elif explicit_workspace and isinstance(explicit_workspace, str) and len(explicit_workspace) > 0:
             curr_workspace = explicit_workspace
         else:
@@ -795,7 +817,7 @@ async def search(request: Request, params: Any = Body(None)):
             # 回放模式：逐行读取历史记录
             try:
                 print(f"Replay file path: {replay_file_path}")
-                replay_file_path='work_space/work_space_20250926_202755_412701/replay.json'
+                replay_file_path='work_space/work_space_20250926_194936_689374/replay.json'
                 if replay_file_path and os.path.exists(replay_file_path):
                     with open(replay_file_path, 'r', encoding='utf-8') as rf:
                         for line in rf:
@@ -853,6 +875,172 @@ async def search(request: Request, params: Any = Body(None)):
             yield chunk
 
     return StreamingResponse(
-        RecordGenerator(),
+        RecordGenerator(work_space_path_time),
         media_type="application/json"
     )
+
+
+@searchRouter.get("/search-results")
+async def show_search_results(request: Request, query: str = "", tool: str = "", timestamp: str = ""):
+    """
+    展示搜索结果的可嵌入页面
+    
+    Args:
+        query: 搜索查询内容
+        tool: 搜索工具名称
+        timestamp: 时间戳（用于避免缓存）
+    """
+    from fastapi.responses import HTMLResponse
+    import urllib.parse
+    
+    # URL解码查询内容
+    decoded_query = urllib.parse.unquote(query) if query else "搜索结果"
+    
+    # 生成HTML页面
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>搜索结果 - {decoded_query}</title>
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background-color: #f5f5f5;
+                line-height: 1.6;
+            }}
+            .container {{
+                max-width: 800px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                overflow: hidden;
+            }}
+            .header {{
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 20px;
+                text-align: center;
+            }}
+            .header h1 {{
+                margin: 0;
+                font-size: 24px;
+                font-weight: 300;
+            }}
+            .search-info {{
+                padding: 20px;
+                border-bottom: 1px solid #eee;
+            }}
+            .search-query {{
+                font-size: 18px;
+                color: #333;
+                margin-bottom: 10px;
+            }}
+            .search-tool {{
+                color: #666;
+                font-size: 14px;
+            }}
+            .content {{
+                padding: 20px;
+            }}
+            .message {{
+                text-align: center;
+                color: #666;
+                font-size: 16px;
+                margin: 40px 0;
+            }}
+            .external-links {{
+                margin-top: 30px;
+            }}
+            .external-links h3 {{
+                color: #333;
+                margin-bottom: 15px;
+            }}
+            .link-item {{
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 6px;
+                padding: 15px;
+                margin-bottom: 10px;
+                transition: all 0.2s ease;
+            }}
+            .link-item:hover {{
+                background: #e9ecef;
+                transform: translateY(-1px);
+            }}
+            .link-item a {{
+                color: #007bff;
+                text-decoration: none;
+                font-weight: 500;
+            }}
+            .link-item a:hover {{
+                text-decoration: underline;
+            }}
+            .link-description {{
+                color: #666;
+                font-size: 14px;
+                margin-top: 5px;
+            }}
+            .footer {{
+                background: #f8f9fa;
+                padding: 15px 20px;
+                text-align: center;
+                color: #666;
+                font-size: 12px;
+                border-top: 1px solid #eee;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🔍 搜索结果</h1>
+            </div>
+            
+            <div class="search-info">
+                <div class="search-query">搜索内容：{decoded_query}</div>
+                <div class="search-tool">搜索工具：{tool if tool else '未知'}</div>
+            </div>
+            
+            <div class="content">
+                <div class="message">
+                    <p>📋 搜索结果已生成，但由于安全限制，无法在此页面直接嵌入显示。</p>
+                    <p>💡 您可以在新窗口中打开以下链接查看详细内容：</p>
+                </div>
+                
+                <div class="external-links">
+                    <h3>🔗 相关搜索链接</h3>
+                    <div class="link-item">
+                        <a href="https://www.baidu.com/s?wd={urllib.parse.quote(decoded_query)}" target="_blank">
+                            🔍 百度搜索：{decoded_query}
+                        </a>
+                        <div class="link-description">在百度中搜索相关内容</div>
+                    </div>
+                    <div class="link-item">
+                        <a href="https://www.google.com/search?q={urllib.parse.quote(decoded_query)}" target="_blank">
+                            🌐 Google搜索：{decoded_query}
+                        </a>
+                        <div class="link-description">在Google中搜索相关内容</div>
+                    </div>
+                    <div class="link-item">
+                        <a href="https://zh.wikipedia.org/wiki/Special:Search?search={urllib.parse.quote(decoded_query)}" target="_blank">
+                            📚 维基百科：{decoded_query}
+                        </a>
+                        <div class="link-description">在维基百科中搜索相关内容</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer">
+                <p>Co-Sight 智能搜索系统 | 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return HTMLResponse(content=html_content)

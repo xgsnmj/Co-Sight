@@ -35,6 +35,7 @@ class EventManager:
             if event_type not in self._subscribers:
                 self._subscribers[event_type] = {}
             self._subscribers[event_type].setdefault(plan_id, []).append(callback)
+        logger.info(f"Subscribed to {event_type} for plan_id: {plan_id}, total callbacks: {len(self._subscribers[event_type][plan_id])}")
 
     def publish(self, event_type: str, plan_or_plan_id=None, event_data=None):
         """发布事件 - 支持Plan对象和工具事件数据"""
@@ -46,6 +47,7 @@ class EventManager:
                 if event_type in self._subscribers and plan_id in self._subscribers[event_type]:
                     callbacks = self._subscribers[event_type][plan_id].copy()
 
+            logger.info(f"Publishing tool_event for plan_id: {plan_id}, callbacks: {len(callbacks)}")
             # 对于工具事件，使用同步调用确保顺序
             for callback in callbacks:
                 try:
@@ -70,6 +72,7 @@ class EventManager:
             if event_type in self._subscribers and plan_id in self._subscribers[event_type]:
                 callbacks = self._subscribers[event_type][plan_id].copy()
 
+        logger.info(f"Publishing {event_type} for plan_id: {plan_id}, callbacks: {len(callbacks)}")
         for callback in callbacks:
             self._executor.submit(self._safe_callback, callback, plan)
 

@@ -79,12 +79,40 @@ class ChatLLM:
                 else:
                     raise Exception(response)
                 break
+            except json.JSONDecodeError as json_error:
+                logger.error(f"JSON decode error on attempt {attempt + 1}: {json_error}")
+                
+                # 更详细的错误信息记录
+                response_info = "No response object"
+                if response is not None:
+                    if hasattr(response, 'content'):
+                        response_info = f"Response content: {response.content}"
+                    elif hasattr(response, 'text'):
+                        response_info = f"Response text: {response.text}"
+                    elif hasattr(response, 'choices') and response.choices:
+                        try:
+                            content = response.choices[0].message.content if response.choices[0].message else "No message content"
+                            response_info = f"Response message content: {content[:500]}..." if len(str(content)) > 500 else f"Response message content: {content}"
+                        except Exception:
+                            response_info = f"Response object: {type(response)} - {str(response)[:500]}..."
+                    else:
+                        response_info = f"Response object: {type(response)} - {str(response)[:500]}..."
+                
+                logger.error(f"Response details: {response_info}")
+                
+                if attempt == max_retries - 1:
+                    raise ZaeFrameworkException(400, f"JSON decode error after {max_retries} attempts: {json_error}")
+                time.sleep(5)  # 增加等待时间
             except Exception as e:
                 logger.warning(f"chat with LLM error: {e} on attempt {attempt + 1}, retrying...", exc_info=True)
-                if "TPM limit reached"  in str(e):
+                if "TPM limit reached" in str(e):
                     time.sleep(60)
+                elif "rate limit" in str(e).lower():
+                    time.sleep(30)
+                elif "timeout" in str(e).lower():
+                    time.sleep(10)
                 if attempt == max_retries-1:
-                    logger.error(f"Failed to create after {max_retries + 1} attempts.")
+                    logger.error(f"Failed to create after {max_retries} attempts.")
                     raise ZaeFrameworkException(400, f"chat with LLM failed, please check LLM config. reason：{e}")
                 time.sleep(3)  # 增加等待时间，避免频繁重试
 
@@ -105,8 +133,25 @@ class ChatLLM:
                     json.loads(tool_call.arguments)
                     break
                 except JSONDecodeError as jsone:
-                    tool_call.arguments = self.chat_to_llm([{"role": "user",
-                                                             "content": f"下面的json字符串格式有错误，请帮忙修正。重要：仅输出修正的字符串。\\n{tool_call.arguments}"}])
+                    logger.warning(f"Tool call arguments JSON decode error on attempt {attempt + 1}: {jsone}")
+                    logger.warning(f"Invalid arguments: {tool_call.arguments}")
+                    
+                    try:
+                        # 尝试修复JSON格式
+                        fixed_arguments = self.chat_to_llm([{"role": "user",
+                                                           "content": f"下面的json字符串格式有错误，请帮忙修正。重要：仅输出修正的字符串。\n{tool_call.arguments}"}])
+                        # 验证修复后的JSON是否有效
+                        json.loads(fixed_arguments)
+                        tool_call.arguments = fixed_arguments
+                        logger.info(f"Successfully fixed tool call arguments on attempt {attempt + 1}")
+                        break
+                    except Exception as fix_error:
+                        logger.error(f"Failed to fix tool call arguments on attempt {attempt + 1}: {fix_error}")
+                        if attempt == 2:  # 最后一次尝试
+                            # 如果修复失败，使用默认的空JSON对象
+                            tool_call.arguments = "{}"
+                            logger.warning("Using empty JSON object as fallback for tool call arguments")
+                            break
 
     @time_record
     def chat_to_llm(self, messages: List[Dict[str, Any]]):

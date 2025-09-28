@@ -15,13 +15,76 @@
 
 import re
 import json
+import time
+import os
 import requests
 from typing import Any, Dict, Optional, List
 from app.common.logger_util import logger
 
 
+
+
 class ToolResultProcessor:
     """工具结果处理器，针对不同工具类型处理结果"""
+    
+    @staticmethod
+    def _detect_language_from_content(content: str) -> str:
+        """
+        根据内容检测语言类型
+        
+        Args:
+            content: 要检测的内容
+            
+        Returns:
+            str: 'zh' 表示中文，'en' 表示英文
+        """
+        if not content or not isinstance(content, str):
+            return 'zh'  # 默认中文
+        
+        # 统计中文字符数量（包括中文标点）
+        chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff' or '\u3000' <= c <= '\u303f'])
+        
+        # 统计英文字符数量（只统计纯英文单词，排除中文中的英文字母）
+        import re
+        # 使用正则表达式匹配英文单词
+        english_words = re.findall(r'\b[a-zA-Z]+\b', content)
+        english_chars = sum(len(word) for word in english_words)
+        
+        # 调试信息
+        logger.debug(f"Language detection - Content: '{content}', Chinese chars: {chinese_chars}, English chars: {english_chars}")
+        
+        # 如果中文字符数量大于英文字符数量，判断为中文
+        if chinese_chars > english_chars:
+            return 'zh'
+        elif english_chars > 0:
+            return 'en'
+        else:
+            return 'zh'  # 默认中文
+    
+    @staticmethod
+    def _get_localized_summary(chinese_summary: str, english_summary: str, task_content: str = "") -> str:
+        """
+        根据任务内容判断语言并返回对应的summary内容
+        
+        Args:
+            chinese_summary: 中文摘要
+            english_summary: 英文摘要
+            task_content: 任务内容，用于判断语言
+            
+        Returns:
+            str: 根据任务内容语言返回对应的摘要
+        """
+        try:
+            # 根据任务内容检测语言
+            detected_language = ToolResultProcessor._detect_language_from_content(task_content)
+            
+            if detected_language == 'en':
+                return english_summary
+            else:
+                return chinese_summary
+        except Exception:
+            # 如果检测失败，默认返回中文
+            return chinese_summary
     
     @staticmethod
     def batch_check_embeddable(urls: List[str], max_check: int = 10) -> Dict[str, bool]:
@@ -63,7 +126,7 @@ class ToolResultProcessor:
         }
         try:
             # 使用流式GET请求只获取头信息，不下载完整内容
-            with requests.get(url, headers=headers, timeout=10, stream=True, allow_redirects=True) as response:
+            with requests.get(url, headers=headers, timeout=10, stream=True, allow_redirects=True, verify=False) as response:
                 response.raise_for_status()  # 对于错误状态码抛出异常 (4xx 或 5xx)
                 # 头信息不区分大小写，所以将键转换为小写
                 response_headers = {k.lower(): v for k, v in response.headers.items()}
@@ -93,11 +156,68 @@ class ToolResultProcessor:
             return False
     
     @staticmethod
+    def _generate_search_results_page_url(tool_name: str, tool_args: str, search_results: list = None) -> str:
+        """
+        生成可嵌入的搜索结果展示页面URL
+        
+        Args:
+            tool_name: 搜索工具名称
+            tool_args: 工具参数，包含查询内容
+            search_results: 搜索结果列表
+            
+        Returns:
+            str: 可嵌入的搜索结果展示页面URL
+        """
+        try:
+            # 从tool_args中提取查询内容
+            query = ""
+            if tool_args:
+                try:
+                    # 尝试解析JSON格式的tool_args
+                    parsed_args = json.loads(tool_args)
+                    if isinstance(parsed_args, dict):
+                        # 尝试多种可能的查询参数key
+                        for key in ['query', 'q', 'search', 'keyword', 'text']:
+                            if key in parsed_args:
+                                query = str(parsed_args[key])
+                                break
+                except json.JSONDecodeError:
+                    # 如果不是JSON格式，直接使用tool_args作为查询内容
+                    query = tool_args
+            
+            # 如果仍然没有查询内容，使用默认值
+            if not query:
+                query = "搜索结果"
+            
+            # URL编码查询内容
+            import urllib.parse
+            encoded_query = urllib.parse.quote(query)
+            
+            # 生成搜索结果展示页面的URL
+            # 使用我们自己的API端点来展示搜索结果
+            base_url = "/api/nae-deep-research/v1/search-results"
+            params = {
+                'query': encoded_query,
+                'tool': tool_name,
+                'timestamp': str(int(time.time() * 1000))  # 添加时间戳避免缓存
+            }
+            
+            # 构建查询参数
+            param_str = '&'.join([f"{k}={v}" for k, v in params.items()])
+            return f"{base_url}?{param_str}"
+                
+        except Exception as e:
+            logger.error(f"生成搜索结果页面URL时出错: {e}")
+            # 出错时返回一个默认的搜索结果页面
+            return "/api/nae-deep-research/v1/search-results?query=搜索结果&tool=default"
+    
+    @staticmethod
     def _to_frontend_url(path_value: str) -> str:
         """将包含 work_space 的本地绝对路径改写为前端可访问的 URL。
 
         规则：
         - 仅当路径中包含 "work_space/" 时改写
+        - 如果文件名没有前缀文件夹，自动补上当前工作空间路径
         - 使用配置项 base_api_url，缺省为 "/api/nae-deep-research/v1"
         - 仅对文件名进行 URL 编码，目录保持原样
         """
@@ -108,8 +228,29 @@ class ToolResultProcessor:
             normalized = path_value.replace("\\", "/")
             marker = "work_space/"
             idx = normalized.find(marker)
+            
+            # 如果没有找到work_space/标记，检查是否是纯文件名
             if idx == -1:
-                return path_value
+                # 检查是否是纯文件名（不包含路径分隔符）
+                if "/" not in normalized and "\\" not in normalized:
+                    # 获取当前工作空间路径
+                    try:
+                        current_workspace = os.environ.get('WORKSPACE_PATH')
+                        if current_workspace:
+                            # 构建完整路径
+                            full_path = os.path.join(current_workspace, normalized).replace("\\", "/")
+                            # 重新查找work_space标记
+                            idx = full_path.find(marker)
+                            if idx != -1:
+                                normalized = full_path
+                            else:
+                                return path_value
+                        else:
+                            return path_value
+                    except Exception:
+                        return path_value
+                else:
+                    return path_value
 
             relative = normalized[idx:]
 
@@ -135,7 +276,7 @@ class ToolResultProcessor:
             return path_value
 
     @staticmethod
-    def process_tool_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+    def process_tool_result(tool_name: str, tool_args: str, tool_result: str, task_title: str = "") -> Dict[str, Any]:
         """
         根据工具类型处理结果
         
@@ -143,6 +284,7 @@ class ToolResultProcessor:
             tool_name: 工具名称
             tool_args: 工具参数
             tool_result: 工具原始结果
+            task_title: 任务标题，用于语言检测
             
         Returns:
             处理后的结果字典
@@ -150,25 +292,25 @@ class ToolResultProcessor:
         try:
             # 根据工具名称精确匹配选择处理方式
             if tool_name in ['search_baidu', 'search_google', 'search_wiki', 'tavily_search', 'image_search']:
-                return ToolResultProcessor._process_search_result(tool_name, tool_args, tool_result)
+                return ToolResultProcessor._process_search_result(tool_name, tool_args, tool_result, task_title)
             elif tool_name == 'execute_code':
-                return ToolResultProcessor._process_code_result(tool_name, tool_args, tool_result)
+                return ToolResultProcessor._process_code_result(tool_name, tool_args, tool_result, task_title)
             elif tool_name in ['file_saver', 'file_read', 'file_str_replace', 'file_find_in_content','create_html_report']:
-                return ToolResultProcessor._process_file_result(tool_name, tool_args, tool_result)
+                return ToolResultProcessor._process_file_result(tool_name, tool_args, tool_result, task_title)
             elif tool_name == 'browser_use':
-                return ToolResultProcessor._process_web_result(tool_name, tool_args, tool_result)
+                return ToolResultProcessor._process_web_result(tool_name, tool_args, tool_result, task_title)
             elif tool_name == 'fetch_website_content':
-                return ToolResultProcessor._process_website_content_result(tool_name, tool_args, tool_result)
+                return ToolResultProcessor._process_website_content_result(tool_name, tool_args, tool_result, task_title)
             elif tool_name in ['ask_question_about_image', 'ask_question_about_video']:
-                return ToolResultProcessor._process_image_result(tool_name, tool_args, tool_result)
+                return ToolResultProcessor._process_image_result(tool_name, tool_args, tool_result, task_title)
             else:
-                return ToolResultProcessor._process_default_result(tool_name, tool_args, tool_result)
+                return ToolResultProcessor._process_default_result(tool_name, tool_args, tool_result, task_title)
         except Exception as e:
             logger.error(f"Error processing tool result for {tool_name}: {e}")
             return ToolResultProcessor._process_default_result(tool_name, tool_args, tool_result)
     
     @staticmethod
-    def _process_search_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+    def _process_search_result(tool_name: str, tool_args: str, tool_result: str, task_title: str = "") -> Dict[str, Any]:
         """处理搜索结果"""
         try:
             # 首先尝试解析为JSON（适用于tavily等结构化结果）
@@ -256,11 +398,22 @@ class ToolResultProcessor:
             if result_count == 0:
                 result_count = len(unique_urls)
             
+            # 确定first_url
+            first_url = None
+            if embeddable_urls:
+                first_url = embeddable_urls[0]
+            else:
+                # 如果embeddable_urls为空，生成可嵌入的搜索结果展示页面URL
+                first_url = ToolResultProcessor._generate_search_results_page_url(tool_name, tool_args, unique_urls)
+            
             return {
                 "tool_type": "search",
-                "summary": f"搜索完成，找到 {result_count} 个结果，其中 {len(embeddable_urls)} 个可在电脑区浏览",
-                "summary_en": f"Search completed, found {result_count} results, {len(embeddable_urls)} can be browsed in desktop area",
-                "first_url": embeddable_urls[0] if embeddable_urls else None,
+                "summary": ToolResultProcessor._get_localized_summary(
+                    f"搜索完成，找到 {result_count} 个结果，其中 {len(embeddable_urls)} 个可在电脑区浏览",
+                    f"Search completed, found {result_count} results, {len(embeddable_urls)} can be browsed in desktop area",
+                    task_title
+                ),
+                "first_url": first_url,
                 "urls": unique_urls,  # 所有URL列表
                 "embeddable_urls": embeddable_urls,  # 可嵌入iframe的URL列表
                 "non_embeddable_urls": non_embeddable_urls,  # 不可嵌入iframe的URL列表
@@ -273,13 +426,16 @@ class ToolResultProcessor:
             logger.error(f"Error processing search result: {e}")
             return {
                 "tool_type": "search",
-                "summary": "搜索完成",
-                "summary_en": "Search completed",
+                "summary": ToolResultProcessor._get_localized_summary(
+                    "搜索完成",
+                    "Search completed",
+                    task_title
+                ),
                 "error": str(e)
             }
     
     @staticmethod
-    def _process_code_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+    def _process_code_result(tool_name: str, tool_args: str, tool_result: str, task_title: str = "") -> Dict[str, Any]:
         """处理代码执行结果"""
         try:
             # 提取代码内容
@@ -293,8 +449,11 @@ class ToolResultProcessor:
             
             return {
                 "tool_type": "code_execution",
-                "summary": f"代码执行{'成功' if is_success else '失败'}",
-                "summary_en": f"Code execution {'successful' if is_success else 'failed'}",
+                "summary": ToolResultProcessor._get_localized_summary(
+                    f"代码执行{'成功' if is_success else '失败'}",
+                    f"Code execution {'successful' if is_success else 'failed'}",
+                    task_title
+                ),
                 "code_content": code_content[:200] + "..." if len(code_content) > 200 else code_content,
                 "output_length": output_length,
                 "is_success": is_success
@@ -303,13 +462,16 @@ class ToolResultProcessor:
             logger.error(f"Error processing code result: {e}")
             return {
                 "tool_type": "code_execution",
-                "summary": "代码执行完成",
-                "summary_en": "Code execution completed",
+                "summary": ToolResultProcessor._get_localized_summary(
+                    "代码执行完成",
+                    "Code execution completed",
+                    task_title
+                ),
                 "error": str(e)
             }
     
     @staticmethod
-    def _process_file_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+    def _process_file_result(tool_name: str, tool_args: str, tool_result: str, task_title: str = "") -> Dict[str, Any]:
         """处理文件操作结果"""
         try:
             # 解析tool_args中的JSON数据
@@ -333,30 +495,33 @@ class ToolResultProcessor:
             # 将本地路径改写为前端URL
             file_path = ToolResultProcessor._to_frontend_url(file_path)
             
-            # 判断操作类型
+            # 判断操作类型并生成摘要
             if 'read' in tool_name.lower():
                 operation = "读取"
                 content_length = len(tool_result)
-                summary = f"文件读取完成，内容长度: {content_length} 字符"
+                summary = ToolResultProcessor._get_localized_summary(
+                    f"文件读取完成，内容长度: {content_length} 字符",
+                    f"File read completed, content length: {len(tool_result)} characters",
+                    task_title
+                )
             elif 'save' in tool_name.lower() or 'write' in tool_name.lower():
                 operation = "保存"
-                summary = "文件保存完成"
+                summary = ToolResultProcessor._get_localized_summary(
+                    "文件保存完成",
+                    "File save completed",
+                    task_title
+                )
             else:
                 operation = "文件操作"
-                summary = "文件操作完成"
-            
-            # 生成英文摘要
-            if 'read' in tool_name.lower():
-                summary_en = f"File read completed, content length: {len(tool_result)} characters"
-            elif 'save' in tool_name.lower() or 'write' in tool_name.lower():
-                summary_en = "File save completed"
-            else:
-                summary_en = "File operation completed"
+                summary = ToolResultProcessor._get_localized_summary(
+                    "文件操作完成",
+                    "File operation completed",
+                    task_title
+                )
             
             return {
                 "tool_type": "file_operation",
                 "summary": summary,
-                "summary_en": summary_en,
                 "operation": operation,
                 "file_path": file_path,
                 "content_length": len(tool_result) if 'read' in tool_name.lower() else None
@@ -365,13 +530,16 @@ class ToolResultProcessor:
             logger.error(f"Error processing file result: {e}")
             return {
                 "tool_type": "file_operation",
-                "summary": "文件操作完成",
-                "summary_en": "File operation completed",
+                "summary": ToolResultProcessor._get_localized_summary(
+                    "文件操作完成",
+                    "File operation completed",
+                    task_title
+                ),
                 "error": str(e)
             }
     
     @staticmethod
-    def _process_web_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+    def _process_web_result(tool_name: str, tool_args: str, tool_result: str, task_title: str = "") -> Dict[str, Any]:
         """处理网页操作结果"""
         try:
             # 提取URL
@@ -379,25 +547,26 @@ class ToolResultProcessor:
             url_match = re.search(url_pattern, tool_args)
             url = url_match.group(0) if url_match else "未知URL"
             
-            # 判断操作类型
+            # 判断操作类型并生成摘要
             if 'fetch' in tool_name.lower():
                 operation = "网页抓取"
                 content_length = len(tool_result)
-                summary = f"网页抓取完成，内容长度: {content_length} 字符"
+                summary = ToolResultProcessor._get_localized_summary(
+                    f"网页抓取完成，内容长度: {content_length} 字符",
+                    f"Web scraping completed, content length: {len(tool_result)} characters",
+                    task_title
+                )
             else:
                 operation = "网页操作"
-                summary = "网页操作完成"
-            
-            # 生成英文摘要
-            if 'fetch' in tool_name.lower():
-                summary_en = f"Web scraping completed, content length: {len(tool_result)} characters"
-            else:
-                summary_en = "Web operation completed"
+                summary = ToolResultProcessor._get_localized_summary(
+                    "网页操作完成",
+                    "Web operation completed",
+                    task_title
+                )
             
             return {
                 "tool_type": "web_operation",
                 "summary": summary,
-                "summary_en": summary_en,
                 "operation": operation,
                 "url": url,
                 "content_length": len(tool_result)
@@ -406,13 +575,16 @@ class ToolResultProcessor:
             logger.error(f"Error processing web result: {e}")
             return {
                 "tool_type": "web_operation",
-                "summary": "网页操作完成",
-                "summary_en": "Web operation completed",
+                "summary": ToolResultProcessor._get_localized_summary(
+                    "网页操作完成",
+                    "Web operation completed",
+                    task_title
+                ),
                 "error": str(e)
             }
     
     @staticmethod
-    def _process_website_content_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+    def _process_website_content_result(tool_name: str, tool_args: str, tool_result: str, task_title: str = "") -> Dict[str, Any]:
         """处理网站内容抓取结果"""
         try:
             # 提取URL
@@ -450,19 +622,19 @@ class ToolResultProcessor:
                     not line.startswith('http')):
                     potential_titles.append(line)
             
-            summary = f"网站内容抓取{'成功' if not is_error else '失败'}，内容长度: {content_length} 字符"
-            if is_error:
-                summary += f"，错误信息: {tool_result}"
+            # 生成摘要
+            chinese_summary = f"网站内容抓取{'成功' if not is_error else '失败'}，内容长度: {content_length} 字符"
+            english_summary = f"Website content scraping {'successful' if not is_error else 'failed'}, content length: {content_length} characters"
             
-            # 生成英文摘要
-            summary_en = f"Website content scraping {'successful' if not is_error else 'failed'}, content length: {content_length} characters"
             if is_error:
-                summary_en += f", error: {tool_result}"
+                chinese_summary += f"，错误信息: {tool_result}"
+                english_summary += f", error: {tool_result}"
+            
+            summary = ToolResultProcessor._get_localized_summary(chinese_summary, english_summary, task_title)
             
             return {
                 "tool_type": "website_content",
                 "summary": summary,
-                "summary_en": summary_en,
                 "operation": "网站内容抓取",
                 "url": url,
                 "content_length": content_length,
@@ -477,35 +649,39 @@ class ToolResultProcessor:
             logger.error(f"Error processing website content result: {e}")
             return {
                 "tool_type": "website_content",
-                "summary": "网站内容抓取完成",
-                "summary_en": "Website content scraping completed",
+                "summary": ToolResultProcessor._get_localized_summary(
+                    "网站内容抓取完成",
+                    "Website content scraping completed",
+                    task_title
+                ),
                 "operation": "网站内容抓取",
                 "error": str(e),
                 "is_success": False
             }
 
     @staticmethod
-    def _process_image_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+    def _process_image_result(tool_name: str, tool_args: str, tool_result: str, task_title: str = "") -> Dict[str, Any]:
         """处理图像分析结果"""
         try:
-            # 判断操作类型
+            # 判断操作类型并生成摘要
             if 'question' in tool_name.lower():
                 operation = "图像问答"
-                summary = "图像分析完成"
+                summary = ToolResultProcessor._get_localized_summary(
+                    "图像分析完成",
+                    "Image analysis completed",
+                    task_title
+                )
             else:
                 operation = "图像处理"
-                summary = "图像处理完成"
-            
-            # 生成英文摘要
-            if 'question' in tool_name.lower():
-                summary_en = "Image analysis completed"
-            else:
-                summary_en = "Image processing completed"
+                summary = ToolResultProcessor._get_localized_summary(
+                    "图像处理完成",
+                    "Image processing completed",
+                    task_title
+                )
             
             return {
                 "tool_type": "image_analysis",
                 "summary": summary,
-                "summary_en": summary_en,
                 "operation": operation,
                 "result_length": len(tool_result)
             }
@@ -513,18 +689,24 @@ class ToolResultProcessor:
             logger.error(f"Error processing image result: {e}")
             return {
                 "tool_type": "image_analysis",
-                "summary": "图像处理完成",
-                "summary_en": "Image processing completed",
+                "summary": ToolResultProcessor._get_localized_summary(
+                    "图像处理完成",
+                    "Image processing completed",
+                    task_title
+                ),
                 "error": str(e)
             }
     
     @staticmethod
-    def _process_default_result(tool_name: str, tool_args: str, tool_result: str) -> Dict[str, Any]:
+    def _process_default_result(tool_name: str, tool_args: str, tool_result: str, task_title: str = "") -> Dict[str, Any]:
         """处理默认结果"""
         return {
             "tool_type": "other",
-            "summary": f"{tool_name} 执行完成",
-            "summary_en": f"{tool_name} execution completed",
+            "summary": ToolResultProcessor._get_localized_summary(
+                f"{tool_name} 执行完成",
+                f"{tool_name} execution completed",
+                task_title
+            ),
             "result_length": len(tool_result),
             "has_result": bool(tool_result.strip())
         }

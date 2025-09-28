@@ -131,11 +131,13 @@ class MessageService {
      * 处理tool event消息
      */
     handleToolEvent(messageData) {
-        const toolEventData = messageData.data.initData.plan;
+        // 兼容两种数据格式：直接在initData中，或者在initData.plan中
+        const toolEventData = messageData.data.initData.plan || messageData.data.initData;
         const stepIndex = toolEventData.step_index;
         const eventType = toolEventData.event_type;
         
         console.log(`处理tool event: ${eventType}, step: ${stepIndex}, tool: ${toolEventData.tool_name}`);
+        console.log('完整的toolEventData:', toolEventData);
 
         // 确保stepIndex对应的数组存在
         if (!this.stepToolEvents.has(stepIndex)) {
@@ -276,13 +278,18 @@ class MessageService {
      */
     updateStepPanel(stepIndex, toolCallRecord) {
         const nodeId = stepIndex + 1;
+        console.log(`更新Step Panel: stepIndex=${stepIndex}, nodeId=${nodeId}`, toolCallRecord);
 
         // 转换为main.js期望的格式
         const toolCall = this.convertToToolCallFormat(toolCallRecord, nodeId);
+        console.log('转换后的toolCall:', toolCall);
 
         // 更新panel显示
         if (typeof updateNodeToolPanel === 'function') {
+            console.log('调用updateNodeToolPanel函数');
             updateNodeToolPanel(nodeId, toolCall);
+        } else {
+            console.error('updateNodeToolPanel函数不存在');
         }
     }
 

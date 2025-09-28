@@ -20,6 +20,7 @@ from app.common.logger_util import logger
 from app.cosight.llm.chat_llm import ChatLLM
 from config.config import get_credibility_model_config
 from llm import set_model
+from .i18n_service import i18n
 
 
 class CredibilityAnalyzer:
@@ -28,13 +29,47 @@ class CredibilityAnalyzer:
     def __init__(self):
         """初始化可信信息分析器"""
         self.llm = None  # 延迟初始化
-        self.credibility_types = {
+        self.credibility_types_zh = {
             "truth": "常识或者真理",
             "verified_facts": "给定或者已验证的事实", 
             "searchable_facts": "需要查找的事实",
             "derived_facts": "需要推导的事实",
             "educated_guess": "有根据的猜测"
         }
+        self.credibility_types_en = {
+            "truth": "Common Sense or Truth",
+            "verified_facts": "Given or Verified Facts", 
+            "searchable_facts": "Searchable Facts",
+            "derived_facts": "Derived Facts",
+            "educated_guess": "Educated Guess"
+        }
+    
+    def _detect_language(self, text: str) -> str:
+        """检测文本语言，返回'zh'或'en'"""
+        if not text:
+            return 'zh'  # 默认中文
+        
+        # 检查是否包含中文字符（包括中文标点）
+        chinese_chars = sum(1 for char in text if '\u4e00' <= char <= '\u9fff' or '\u3000' <= char <= '\u303f')
+        
+        # 如果包含中文字符，优先判断为中文
+        if chinese_chars > 0:
+            return 'zh'
+        
+        # 如果没有中文字符，检查是否主要是英文
+        english_chars = sum(1 for char in text if char.isalpha() and ord(char) < 128)
+        if english_chars > 0:
+            return 'en'
+        
+        # 默认中文
+        return 'zh'
+    
+    def _get_credibility_types(self, language: str) -> Dict[str, str]:
+        """根据语言获取可信度类型定义"""
+        if language == 'en':
+            return self.credibility_types_en
+        else:
+            return self.credibility_types_zh
     
     def _init_llm(self) -> Optional[ChatLLM]:
         """初始化LLM客户端"""
@@ -55,8 +90,15 @@ class CredibilityAnalyzer:
             logger.error(f"初始化可信信息分析LLM失败: {str(e)}", exc_info=True)
             return None
     
-    def _get_credibility_prompt(self, step_content: str, all_steps_content: str, tool_events_summary: str, tool_events_json: str) -> str:
+    def _get_credibility_prompt(self, step_content: str, all_steps_content: str, tool_events_summary: str, tool_events_json: str, language: str = 'zh') -> str:
         """生成可信信息分析的prompt，关注工具结果内容而非调用过程。"""
+        if language == 'en':
+            return self._get_credibility_prompt_en(step_content, all_steps_content, tool_events_summary, tool_events_json)
+        else:
+            return self._get_credibility_prompt_zh(step_content, all_steps_content, tool_events_summary, tool_events_json)
+    
+    def _get_credibility_prompt_zh(self, step_content: str, all_steps_content: str, tool_events_summary: str, tool_events_json: str) -> str:
+        """生成中文可信信息分析的prompt"""
         return f"""你是一个专业的信息可信度分析师。请基于以下工具执行结果中获取的具体信息内容，按照5种可信度类型进行总结。
 
 **任务背景：**
@@ -80,26 +122,21 @@ class CredibilityAnalyzer:
    - 定义：被广泛接受的基础事实和逻辑真理
    - 特征：无需验证、普遍认可、逻辑自洽
 
-
 2. **给定或者已验证的事实 (Given/Verified Facts)**
    - 定义：来自权威来源或已通过不同信息源反复验证的明确事实
    - 特征：官方文档、权威数据、PDF文件、学术论文
-
 
 3. **查找的事实 (Searchable Facts)**
    - 定义：通过网络搜索或数据库查询获取的事实信息
    - 特征：搜索结果、网页内容、实时数据、最新信息
 
-
 4. **推导的事实 (Derived Facts)**
    - 定义：基于获取的信息通过逻辑推理得出的结论
    - 特征：基于数据的分析、趋势推断、因果关系
 
-
 5. **有根据的猜测 (Educated Guess)**
    - 定义：基于有限信息做出的合理推测和观点
    - 特征：专家观点、市场预测、可能性分析
-
 
 **输出要求：**
 1) 每类至少1条、至多2条，单句不超过50字
@@ -119,6 +156,66 @@ class CredibilityAnalyzer:
 ```
 
 请开始分析："""
+    
+    def _get_credibility_prompt_en(self, step_content: str, all_steps_content: str, tool_events_summary: str, tool_events_json: str) -> str:
+        """生成英文可信信息分析的prompt"""
+        return f"""You are a professional information credibility analyst. Please analyze the specific information content obtained from the following tool execution results and summarize according to 5 credibility types.
+
+**Task Background:**
+Current Step: {step_content}
+Completed Steps: {all_steps_content}
+
+**Tool Execution Results:**
+{tool_events_summary}
+
+**Detailed Result Data:**
+```json
+{tool_events_json}
+```
+
+**Analysis Requirements:**
+Please extract specific information content related to the task from the above tool results and classify and summarize according to the following credibility types. Focus on the actual data, facts, opinions and other valuable information returned by the tools, rather than the tool invocation process itself.
+
+**Credibility Classification Definitions:**
+
+1. **Common Sense or Truth**
+   - Definition: Widely accepted basic facts and logical truths
+   - Characteristics: No verification needed, universally recognized, logically consistent
+
+2. **Given or Verified Facts**
+   - Definition: Clear facts from authoritative sources or verified through multiple information sources
+   - Characteristics: Official documents, authoritative data, PDF files, academic papers
+
+3. **Searchable Facts**
+   - Definition: Factual information obtained through web search or database queries
+   - Characteristics: Search results, web content, real-time data, latest information
+
+4. **Derived Facts**
+   - Definition: Conclusions drawn through logical reasoning based on acquired information
+   - Characteristics: Data-based analysis, trend inference, causal relationships
+
+5. **Educated Guess**
+   - Definition: Reasonable speculation and opinions based on limited information
+   - Characteristics: Expert opinions, market predictions, possibility analysis
+
+**Output Requirements:**
+1) At least 1, at most 2 items per category, single sentence not exceeding 50 words
+2) Focus on describing specific information content extracted from tool results, not tool invocation process
+3) Note information source at the end of sentence (e.g., from "search results/official data/expert analysis")
+4) Ensure information has direct value and guidance significance for user tasks, avoid repetition, redundancy, irrelevant information
+
+**Output Format (strictly follow this JSON format):**
+```json
+{{
+    "truth": ["common sense or truth 1", "common sense or truth 2"],
+    "verified_facts": ["verified fact 1", "verified fact 2"],
+    "searchable_facts": ["searchable fact 1", "searchable fact 2"],
+    "derived_facts": ["derived fact 1", "derived fact 2"],
+    "educated_guess": ["educated guess 1", "educated guess 2"]
+}}
+```
+
+Please start analysis:"""
 
     async def analyze_step_credibility(self, current_step: Dict[str, Any], all_completed_steps: List[Dict[str, Any]], tool_events: List[Dict[str, Any]] | None = None) -> Optional[Dict[str, List[str]]]:
         """分析步骤的可信信息
@@ -126,6 +223,7 @@ class CredibilityAnalyzer:
         Args:
             current_step: 当前完成的步骤信息
             all_completed_steps: 所有已完成的步骤信息
+            tool_events: 工具事件列表
             
         Returns:
             可信信息分析结果，格式为 {类型: [总结句子列表]}
@@ -139,6 +237,11 @@ class CredibilityAnalyzer:
             return None
             
         try:
+            # 检测语言
+            step_title = current_step.get('title', '')
+            language = self._detect_language(step_title)
+            logger.info(f"检测到语言: {language}, 步骤标题: {step_title}")
+            
             # 构建当前步骤内容
             current_content = self._format_step_content(current_step)
             
@@ -150,12 +253,12 @@ class CredibilityAnalyzer:
             tool_events_summary = self._format_tool_events_summary(tool_events)
             tool_events_json = self._format_tool_events_json(tool_events)
 
-            # 生成prompt（仅使用当前步骤内容）
-            prompt = self._get_credibility_prompt(current_content, all_content, tool_events_summary, tool_events_json)
+            # 生成prompt（根据语言选择对应的提示词）
+            prompt = self._get_credibility_prompt(current_content, all_content, tool_events_summary, tool_events_json, language)
             
             # 调用LLM分析
             messages = [{"role": "user", "content": prompt}]
-            logger.info(f"开始调用LLM进行可信信息分析，prompt长度: {len(prompt)}")
+            logger.info(f"开始调用LLM进行可信信息分析，语言: {language}, prompt长度: {len(prompt)}")
             
             response = llm.chat_to_llm(messages)
             logger.info(f"LLM响应长度: {len(response) if response else 0}")
@@ -166,11 +269,12 @@ class CredibilityAnalyzer:
                 credibility_result,
                 current_step,
                 all_completed_steps,
-                tool_events
+                tool_events,
+                language
             )
             logger.info(f"解析结果: {credibility_result}")
             
-            logger.info(f"可信信息分析完成，当前步骤: {current_step.get('title', 'Unknown')}")
+            logger.info(f"可信信息分析完成，当前步骤: {current_step.get('title', 'Unknown')}, 语言: {language}")
             return credibility_result
             
         except Exception as e:
@@ -305,13 +409,17 @@ class CredibilityAnalyzer:
         """格式化可信信息为前端消息格式"""
         if not credibility_result:
             return None
+        
+        # 检测语言
+        language = self._detect_language(step_title)
+        credibility_types = self._get_credibility_types(language)
             
         # 构建可信信息内容
         credibility_content = []
         
         for cred_type, items in credibility_result.items():
             if items:  # 只添加有内容的类型
-                type_name = self.credibility_types.get(cred_type, cred_type)
+                type_name = credibility_types.get(cred_type, cred_type)
                 credibility_content.append({
                     "title": type_name,
                     "items": items
@@ -319,10 +427,16 @@ class CredibilityAnalyzer:
         
         if not credibility_content:
             return None
+        
+        # 根据语言设置标题
+        if language == 'en':
+            title = f"Step Credibility Analysis: {step_title}"
+        else:
+            title = f"步骤可信信息分析: {step_title}"
             
         message: Dict[str, Any] = {
             "type": "lui-message-credibility-analysis",
-            "title": f"步骤可信信息分析: {step_title}",
+            "title": title,
             "content": credibility_content,
             "stepTitle": step_title,
             "timestamp": self._get_timestamp()
@@ -335,7 +449,8 @@ class CredibilityAnalyzer:
                                 result: Dict[str, List[str]] | None,
                                 current_step: Dict[str, Any],
                                 all_completed_steps: List[Dict[str, Any]],
-                                tool_events: List[Dict[str, Any]] | None) -> Dict[str, List[str]]:
+                                tool_events: List[Dict[str, Any]] | None,
+                                language: str = 'zh') -> Dict[str, List[str]]:
         categories = [
             ("truth", "常识或真理"),
             ("verified_facts", "已验证事实"),
@@ -345,7 +460,7 @@ class CredibilityAnalyzer:
         ]
         safe_result: Dict[str, List[str]] = {k: (result.get(k) if result else []) or [] for k, _ in categories}
 
-        step_title = current_step.get("title") or "当前步骤"
+        step_title = current_step.get("title") or ("Current Step" if language == 'en' else "当前步骤")
         step_notes = (current_step.get("notes") or "").strip()
         tools_lines = []
         for evt in (tool_events or [])[-10:]:
@@ -358,11 +473,20 @@ class CredibilityAnalyzer:
             if not lst:
                 lst.append(fallback[:50])
 
-        ensure_line(safe_result["truth"], f"与“{step_title}”相关常识：先满足依赖再执行（逻辑）")
-        ensure_line(safe_result["verified_facts"], f"已确认：{(step_notes or '根据当前步骤，暂无给定或者已验证的事实')}")
-        ensure_line(safe_result["searchable_facts"], f"仍需检索：补充“{step_title}”的权威数据与最新动态（搜索）")
-        ensure_line(safe_result["derived_facts"], f"推导：完成“{step_title}”降低后续不确定性（推理）")
-        ensure_line(safe_result["educated_guess"], f"估计：{('工具显示' + tools_hint) if tools_hint else '依据上下文保守判断'}（猜测）")
+        if language == 'en':
+            # 英文回退内容
+            ensure_line(safe_result["truth"], f"Common sense related to '{step_title}': satisfy dependencies before execution (logic)")
+            ensure_line(safe_result["verified_facts"], f"Confirmed: {(step_notes or 'No given or verified facts based on current step')}")
+            ensure_line(safe_result["searchable_facts"], f"Still need to search: supplement authoritative data and latest trends for '{step_title}' (search)")
+            ensure_line(safe_result["derived_facts"], f"Deduction: completing '{step_title}' reduces subsequent uncertainty (reasoning)")
+            ensure_line(safe_result["educated_guess"], f"Estimate: {('tools show ' + tools_hint) if tools_hint else 'conservative judgment based on context'} (guess)")
+        else:
+            # 中文回退内容
+            ensure_line(safe_result["truth"], f"与'{step_title}'相关常识：先满足依赖再执行（逻辑）")
+            ensure_line(safe_result["verified_facts"], f"已确认：{(step_notes or '根据当前步骤，暂无给定或者已验证的事实')}")
+            ensure_line(safe_result["searchable_facts"], f"仍需检索：补充'{step_title}'的权威数据与最新动态（搜索）")
+            ensure_line(safe_result["derived_facts"], f"推导：完成'{step_title}'降低后续不确定性（推理）")
+            ensure_line(safe_result["educated_guess"], f"估计：{('工具显示' + tools_hint) if tools_hint else '依据上下文保守判断'}（猜测）")
 
         for k in safe_result:
             compact = []

@@ -152,6 +152,11 @@ class BaseAgent:
             if not getattr(self, 'plan_id', None):
                 return
             
+            # 过滤MCP工具事件：不发送step_index=-1的MCP工具事件到前端
+            if step_index == -1:
+                logger.debug(f"跳过MCP工具事件发送到前端: {event_type} for {tool_name}")
+                return
+            
             # 增加序列号确保事件顺序
             self._tool_event_sequence += 1
             
@@ -173,7 +178,8 @@ class BaseAgent:
                 event_data["error"] = error
             elif tool_result:
                 # 处理工具结果
-                processed_result = ToolResultProcessor.process_tool_result(tool_name, tool_args, tool_result)
+                task_title = self.plan.title if self.plan else ""
+                processed_result = ToolResultProcessor.process_tool_result(tool_name, tool_args, tool_result, task_title)
                 event_data["processed_result"] = processed_result
                 event_data["raw_result_length"] = len(tool_result)
                 
