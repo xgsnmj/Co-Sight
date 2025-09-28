@@ -84,7 +84,7 @@ class CredibilityService {
         nodeElement.selectAll(".node-indicator, .credibility-circle-group").remove();
 
         // 添加灰色运行状态指示器（创建时不添加点击事件）
-        addNodeIndicator(nodeElement, nodeId, "credibility-circle-group", "translate(20, -20)", "#9E9E9E", "C");
+        addNodeIndicator(nodeElement, nodeId, "credibility-circle-group", "translate(20, -20)", "#9E9E9E", "T");
 
         // 文件列表指示器
         // addNodeIndicator(nodeElement, nodeId, "file-circle-group", "translate(-20, -20)", "#4CAF50", "F");
@@ -128,9 +128,9 @@ class CredibilityService {
                 .transition()
                 .duration(500);
 
-            // 更新文字为 "C" 表示 Credibility
+            // 更新文字为 "T" 表示 Credibility
             runningIndicator.select("text")
-                .html(`C`);
+                .html(`T`);
             console.log(`update node credibility indicator >>>>>>>>>>>>>>>>>>>>> 节点 ${nodeId} 存在可信分级信息，指示器已更新为绿色`);
         } else {
             // 如果没有可信分级信息，保持灰色，不添加点击事件
