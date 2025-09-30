@@ -113,43 +113,106 @@ class ToolResultProcessor:
     @staticmethod
     def check_embeddable(url: str) -> bool:
         """
-        检查给定URL是否可以在iframe中嵌入，通过检查HTTP头信息
+        检查给定URL是否可以在电脑区正常打开和嵌入
+        通过实际HTTP请求检测URL的可访问性和iframe嵌入能力
         
         Args:
             url: 要检查的URL
             
         Returns:
-            bool: 如果可以嵌入返回True，否则返回False
+            bool: 如果可以正常打开并嵌入返回True，否则返回False
         """
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
         try:
-            # 使用流式GET请求只获取头信息，不下载完整内容
-            with requests.get(url, headers=headers, timeout=10, stream=True, allow_redirects=True, verify=False) as response:
-                response.raise_for_status()  # 对于错误状态码抛出异常 (4xx 或 5xx)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            
+            # 获取代理配置
+            proxies = None
+            proxy_url = os.environ.get("BROWSER_PROXY_URL") or os.environ.get("PROXY_URL")
+            if proxy_url:
+                proxies = {
+                    "http": proxy_url,
+                    "https": proxy_url
+                }
+            
+            # 发送HEAD请求检查URL的可访问性和HTTP头
+            with requests.head(url, headers=headers, timeout=15, allow_redirects=True, 
+                             verify=False, proxies=proxies) as response:
+                
+                # 检查HTTP状态码
+                if response.status_code >= 400:
+                    logger.info(f"URL {url} 返回错误状态码 {response.status_code}，无法访问")
+                    return False
+                
                 # 头信息不区分大小写，所以将键转换为小写
                 response_headers = {k.lower(): v for k, v in response.headers.items()}
                 
-                # 1. 检查 X-Frame-Options 头
+                # 1. 检查Content-Type - 非HTML内容不适合iframe嵌入
+                content_type = response_headers.get('content-type', '').lower()
+                if content_type:
+                    if 'application/pdf' in content_type:
+                        logger.info(f"URL {url} 是PDF文件，不适合iframe嵌入")
+                        return False
+                    if 'application/' in content_type and 'text/html' not in content_type:
+                        logger.info(f"URL {url} 的Content-Type不是HTML: {content_type}，不适合iframe嵌入")
+                        return False
+                    if 'image/' in content_type:
+                        logger.info(f"URL {url} 是图片文件，不适合iframe嵌入")
+                        return False
+                
+                # 2. 检查 X-Frame-Options 头 - 明确禁止嵌入
                 x_frame_options = response_headers.get('x-frame-options', '').lower()
                 if x_frame_options in ('deny', 'sameorigin'):
+                    logger.info(f"URL {url} 设置了 X-Frame-Options: {x_frame_options}，禁止iframe嵌入")
                     return False
                 
-                # 2. 检查 Content-Security-Policy 头中的 frame-ancestors
-                csp = response_headers.get('content-security-policy', '')
+                # 3. 检查 Content-Security-Policy 头中的 frame-ancestors
+                csp = response_headers.get('content-security-policy', '').lower()
                 if 'frame-ancestors' in csp:
                     if "'none'" in csp:
+                        logger.info(f"URL {url} 设置了 CSP frame-ancestors: none，禁止iframe嵌入")
                         return False
                     if "'self'" in csp:
+                        logger.info(f"URL {url} 设置了 CSP frame-ancestors: self，禁止iframe嵌入")
                         return False
+                    # 如果没有通配符，也认为不允许跨域嵌入
                     if '*' not in csp:
+                        logger.info(f"URL {url} 的 CSP frame-ancestors 不包含通配符，禁止iframe嵌入")
                         return False
                 
-                # 如果没有找到阻止头信息，假设可以嵌入
-                return True
+                # 4. 检查响应大小 - 过大的内容不适合iframe
+                content_length = response_headers.get('content-length')
+                if content_length:
+                    try:
+                        size_mb = int(content_length) / (1024 * 1024)
+                        if size_mb > 50:  # 超过50MB认为过大
+                            logger.info(f"URL {url} 内容过大 ({size_mb:.1f}MB)，不适合iframe嵌入")
+                            return False
+                    except (ValueError, TypeError):
+                        pass
+                
+                # 5. 检查是否是可访问的HTML页面
+                if 'text/html' in content_type or not content_type:
+                    logger.info(f"URL {url} 是可访问的HTML页面，允许iframe嵌入")
+                    return True
+                else:
+                    logger.info(f"URL {url} 不是HTML页面 (Content-Type: {content_type})，不适合iframe嵌入")
+                    return False
+                
+        except requests.exceptions.Timeout:
+            logger.warning(f"URL {url} 请求超时，无法访问")
+            return False
+        except requests.exceptions.ConnectionError:
+            logger.warning(f"URL {url} 连接失败，无法访问")
+            return False
         except requests.exceptions.RequestException as e:
-            logger.warning(f"无法检查URL '{url}' 的嵌入状态: {e}")
+            logger.warning(f"URL {url} 请求失败: {e}")
             return False
         except Exception as e:
             logger.error(f"检查URL '{url}' 嵌入状态时发生意外错误: {e}")
@@ -177,7 +240,7 @@ class ToolResultProcessor:
                     parsed_args = json.loads(tool_args)
                     if isinstance(parsed_args, dict):
                         # 尝试多种可能的查询参数key
-                        for key in ['query', 'q', 'search', 'keyword', 'text']:
+                        for key in ['query', 'q', 'search', 'keyword', 'text', 'entity']:
                             if key in parsed_args:
                                 query = str(parsed_args[key])
                                 break
@@ -360,6 +423,12 @@ class ToolResultProcessor:
                 http_pattern = r'https?://[^\s\'"<>]+'
                 http_matches = re.findall(http_pattern, tool_result)
                 urls.extend(http_matches)
+                
+                # 方法5: 专门处理维基搜索的URL格式 "Wikipedia URL: https://..."
+                if tool_name == 'search_wiki':
+                    wiki_url_pattern = r'Wikipedia URL:\s*(https?://[^\s\n]+)'
+                    wiki_matches = re.findall(wiki_url_pattern, tool_result)
+                    urls.extend(wiki_matches)
                 
                 # 尝试提取结果数量
                 result_count = len(re.findall(r"'result_id':\s*\d+", tool_result))

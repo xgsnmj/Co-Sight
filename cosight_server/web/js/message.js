@@ -308,7 +308,7 @@ class MessageService {
         let descriptionOverride = null;
 
         // 处理搜索工具的结果，提取URL
-        if (['search_baidu', 'search_google', 'tavily_search', 'image_search'].includes(toolCallRecord.tool_name)) {
+        if (['search_baidu', 'search_google', 'tavily_search', 'image_search', 'search_wiki'].includes(toolCallRecord.tool_name)) {
             const processedResult = toolCallRecord.tool_result;
             if (processedResult && processedResult.first_url) {
                 url = processedResult.first_url;

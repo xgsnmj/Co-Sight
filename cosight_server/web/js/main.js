@@ -273,7 +273,7 @@ function getWorkflowByNodeId(nodeId) {
         let descriptionOverride = null;
 
         // 处理搜索工具的结果，提取URL
-        if (['search_baidu', 'search_google', 'tavily_search', 'image_search'].includes(toolName)) {
+        if (['search_baidu', 'search_google', 'tavily_search', 'image_search', 'search_wiki'].includes(toolName)) {
             try {
                 // 优先 processed_result.first_url 风格（上游已解析对象）
                 if (toolResult && toolResult.first_url) {
@@ -384,7 +384,8 @@ function getToolDisplayName(toolName) {
         'report_generator': 'report_generator',
         'create_plan': 'create_plan',
         'fetch_website_content': 'fetch_website_content',
-        'tavily_search': 'tavily_search'
+        'tavily_search': 'tavily_search',
+        'search_wiki': 'wiki_search'
     };
     const key = toolKeys[toolName];
     if (key && window.I18nService) {
@@ -404,7 +405,8 @@ function getToolDisplayName(toolName) {
         'report_generator': '报告生成',
         'create_plan': '创建计划',
         'fetch_website_content': '获取网页内容',
-        'tavily_search': 'Tavily搜索'
+        'tavily_search': 'Tavily搜索',
+        'search_wiki': '维基百科搜索'
     };
     return toolNames[toolName] || toolName;
 }
@@ -1090,6 +1092,7 @@ function getToolSpecificIcon(tool) {
         'search_google': 'fab fa-google',
         'tavily_search': 'fas fa-search',
         'image_search': 'fas fa-search',
+        'search_wiki': 'fab fa-wikipedia-w',
         'execute_code': 'fas fa-file-code',
         'create_html_report': 'fas fa-chart-line'
     };
@@ -1557,66 +1560,20 @@ function showRightPanelForTool(toolCall) {
         // 先设置为空白页
         iframe.src = 'about:blank';
 
-        // 等待清理完成后再加载新内容
-        setTimeout(() => {
-            let isBlank = true;
-
-            // 设置加载超时机制（10秒）
-            iframe._loadingTimeout = setTimeout(() => {
-                if (isBlank) return;
-                toggleLoadingIndicator(false);
-                if (statusElement) {
-                    statusElement.textContent = (window.I18nService ? window.I18nService.t('loading_timeout').replace('{url}', url) : `加载超时: ${url}`);
-                    statusElement.className = 'error';
-                }
-                console.warn('iframe加载超时:', url);
-            }, 10000);
-
-            // 设置加载完成事件监听器
-            iframe.onload = function () {
-                console.log("iframe.onload =================> ", isBlank)
-                if (isBlank) {
-                    return;
-                }
-
-                // 清理超时定时器
-                if (iframe._loadingTimeout) {
-                    clearTimeout(iframe._loadingTimeout);
-                    iframe._loadingTimeout = null;
-                }
-
-                // 立即隐藏loading，避免与网页内容共存
-                toggleLoadingIndicator(false);
-                // 更新状态文本
-                if (statusElement) {
-                    statusElement.textContent = generateStatusText(tool, url, path);
-                    statusElement.className = 'success';
-                }
-                console.log('iframe加载成功:', url);
-            };
-
-            // 设置加载错误事件监听器
-            iframe.onerror = function () {
-                // 清理超时定时器
-                if (iframe._loadingTimeout) {
-                    clearTimeout(iframe._loadingTimeout);
-                    iframe._loadingTimeout = null;
-                }
-
-                // 隐藏加载提示
-                toggleLoadingIndicator(false);
-                // 更新状态文本
-                if (statusElement) {
-                    statusElement.textContent = (window.I18nService ? window.I18nService.t('webpage_load_failed').replace('{url}', url) : `网页加载失败: ${url}`);
-                    statusElement.className = 'error';
-                }
-                console.error('iframe加载失败:', url);
-            };
-
-            // 加载新内容
-            iframe.src = url;
-            isBlank = false;
-        }, 100); // 增加延迟时间确保清理完成
+        // 检查iframe嵌入是否被允许
+        checkIframeEmbedding(url).then(allowed => {
+            if (allowed) {
+                // 允许嵌入，继续加载
+                loadIframeContent(url, iframe, statusElement, tool, path);
+            } else {
+                // 不允许嵌入，显示错误和替代方案
+                showIframeEmbeddingError(url, statusElement);
+            }
+        }).catch(error => {
+            console.warn('iframe嵌入检查失败，尝试直接加载:', error);
+            // 检查失败时允许尝试加载
+            loadIframeContent(url, iframe, statusElement, tool, path);
+        });
 
     } else if (path) {
         // 处理代码执行工具的特殊情况
@@ -2348,3 +2305,315 @@ function extractUrlFromSearchResult(toolResult, toolName) {
 
     return null;
 }
+
+// ==================== iframe嵌入检查相关函数 ====================
+
+/**
+ * 检查URL是否允许iframe嵌入
+ * @param {string} url - 要检查的URL
+ * @returns {Promise<boolean>} - 是否允许嵌入
+ */
+async function checkIframeEmbedding(url) {
+    try {
+        const response = await fetch('/api/nae-deep-research/v1/check-iframe-embedding', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url: url })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (!result.allowed) {
+            console.warn(`iframe嵌入被拒绝: ${url}, 原因: ${result.reason}`);
+        }
+        
+        return result.allowed;
+    } catch (error) {
+        console.warn('iframe嵌入检查失败:', error);
+        // 检查失败时允许尝试加载
+        return true;
+    }
+}
+
+/**
+ * 加载iframe内容
+ * @param {string} url - 要加载的URL
+ * @param {HTMLElement} iframe - iframe元素
+ * @param {HTMLElement} statusElement - 状态显示元素
+ * @param {string} tool - 工具名称
+ * @param {string} path - 路径
+ */
+function loadIframeContent(url, iframe, statusElement, tool, path) {
+    // 等待清理完成后再加载新内容
+    setTimeout(() => {
+        let isBlank = true;
+
+        // 设置加载超时机制（15秒，比原来更长）
+        iframe._loadingTimeout = setTimeout(() => {
+            if (isBlank) return;
+            toggleLoadingIndicator(false);
+            if (statusElement) {
+                statusElement.textContent = (window.I18nService ? window.I18nService.t('loading_timeout').replace('{url}', url) : `加载超时: ${url}`);
+                statusElement.className = 'error';
+            }
+            console.warn('iframe加载超时:', url);
+        }, 15000);
+
+        // 设置加载完成事件监听器
+        iframe.onload = function () {
+            if (isBlank) return;
+
+            // 清理超时定时器
+            if (iframe._loadingTimeout) {
+                clearTimeout(iframe._loadingTimeout);
+                iframe._loadingTimeout = null;
+            }
+
+            // 立即隐藏loading，避免与网页内容共存
+            toggleLoadingIndicator(false);
+            // 更新状态文本
+            if (statusElement) {
+                statusElement.textContent = generateStatusText(tool, url, path);
+                statusElement.className = 'success';
+            }
+            console.log('iframe加载成功:', url);
+        };
+
+        // 设置加载错误事件监听器
+        iframe.onerror = function () {
+            // 清理超时定时器
+            if (iframe._loadingTimeout) {
+                clearTimeout(iframe._loadingTimeout);
+                iframe._loadingTimeout = null;
+            }
+
+            // 隐藏加载提示
+            toggleLoadingIndicator(false);
+            // 更新状态文本
+            if (statusElement) {
+                statusElement.textContent = (window.I18nService ? window.I18nService.t('webpage_load_failed').replace('{url}', url) : `网页加载失败: ${url}`);
+                statusElement.className = 'error';
+            }
+            console.error('iframe加载失败:', url);
+        };
+
+        // 加载新内容
+        iframe.src = url;
+        isBlank = false;
+    }, 100);
+}
+
+/**
+ * 显示iframe嵌入错误和替代方案
+ * @param {string} url - 无法嵌入的URL
+ * @param {HTMLElement} statusElement - 状态显示元素
+ */
+function showIframeEmbeddingError(url, statusElement) {
+    // 隐藏加载提示
+    toggleLoadingIndicator(false);
+    
+    // 更新状态文本
+    if (statusElement) {
+        statusElement.textContent = `网页不允许嵌入iframe: ${url}`;
+        statusElement.className = 'error';
+    }
+    
+    // 显示替代方案
+    showAlternativeOptions(url);
+}
+
+/**
+ * 显示替代操作选项
+ * @param {string} url - 无法嵌入的URL
+ */
+function showAlternativeOptions(url) {
+    const rightContent = document.querySelector('.right-content');
+    if (!rightContent) return;
+    
+    // 隐藏iframe
+    const iframe = document.getElementById('content-iframe');
+    if (iframe) {
+        iframe.style.display = 'none';
+    }
+    
+    // 显示替代操作面板
+    const alternativePanel = document.createElement('div');
+    alternativePanel.className = 'iframe-alternative-panel';
+    alternativePanel.innerHTML = `
+        <div class="alternative-content">
+            <h3><i class="fas fa-exclamation-triangle"></i> 网页无法嵌入</h3>
+            <p>该网页设置了安全策略，不允许在iframe中显示。</p>
+            <p class="url-info"><strong>网址:</strong> ${url}</p>
+            
+            <div class="alternative-actions">
+                <button class="action-btn primary" onclick="openInNewWindow('${url}')">
+                    <i class="fas fa-external-link-alt"></i> 在新窗口打开
+                </button>
+                <button class="action-btn secondary" onclick="copyUrlToClipboard('${url}')">
+                    <i class="fas fa-copy"></i> 复制链接
+                </button>
+            </div>
+            
+            <div class="help-info">
+                <h4><i class="fas fa-info-circle"></i> 为什么无法嵌入？</h4>
+                <ul>
+                    <li>网站设置了 <code>X-Frame-Options</code> 安全策略</li>
+                    <li>网站使用了 <code>Content-Security-Policy</code> 限制</li>
+                    <li>网站域名在黑名单中（如百度、社交媒体等）</li>
+                </ul>
+            </div>
+        </div>
+        
+        <style>
+            .iframe-alternative-panel {
+                padding: 30px;
+                text-align: center;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            }
+            
+            .alternative-content h3 {
+                color: #f39c12;
+                margin-bottom: 15px;
+                font-size: 1.3em;
+            }
+            
+            .alternative-content p {
+                color: #666;
+                margin: 10px 0;
+                line-height: 1.6;
+            }
+            
+            .url-info {
+                background: #f8f9fa;
+                padding: 10px;
+                border-radius: 5px;
+                margin: 15px 0;
+                word-break: break-all;
+                font-family: monospace;
+                font-size: 0.9em;
+            }
+            
+            .alternative-actions {
+                margin: 25px 0;
+                display: flex;
+                gap: 15px;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            
+            .action-btn {
+                padding: 12px 20px;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+                transition: all 0.3s ease;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+            }
+            
+            .action-btn.primary {
+                background: #007bff;
+                color: white;
+            }
+            
+            .action-btn.primary:hover {
+                background: #0056b3;
+                transform: translateY(-2px);
+            }
+            
+            .action-btn.secondary {
+                background: #6c757d;
+                color: white;
+            }
+            
+            .action-btn.secondary:hover {
+                background: #545b62;
+                transform: translateY(-2px);
+            }
+            
+            .help-info {
+                margin-top: 30px;
+                text-align: left;
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                border-left: 4px solid #007bff;
+            }
+            
+            .help-info h4 {
+                color: #495057;
+                margin-bottom: 10px;
+                font-size: 1.1em;
+            }
+            
+            .help-info ul {
+                margin: 0;
+                padding-left: 20px;
+                color: #666;
+            }
+            
+            .help-info li {
+                margin: 8px 0;
+                line-height: 1.5;
+            }
+            
+            .help-info code {
+                background: #e9ecef;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 0.9em;
+            }
+        </style>
+    `;
+    
+    // 清空现有内容并添加替代面板
+    rightContent.innerHTML = '';
+    rightContent.appendChild(alternativePanel);
+}
+
+/**
+ * 在新窗口打开URL
+ * @param {string} url - 要打开的URL
+ */
+function openInNewWindow(url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+/**
+ * 复制URL到剪贴板
+ * @param {string} url - 要复制的URL
+ */
+async function copyUrlToClipboard(url) {
+    try {
+        await navigator.clipboard.writeText(url);
+        
+        // 显示复制成功提示
+        const button = event.target.closest('.action-btn');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check"></i> 已复制!';
+        button.style.background = '#28a745';
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.style.background = '';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('复制失败:', error);
+        alert('复制失败，请手动复制: ' + url);
+    }
+}
+
+// 将函数暴露到全局作用域
+window.openInNewWindow = openInNewWindow;
+window.copyUrlToClipboard = copyUrlToClipboard;

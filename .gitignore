@@ -22,4 +22,4 @@ work_space/**
 .env
 .cursorindexingignore
 .specstory
-/scripts/
+scripts/*

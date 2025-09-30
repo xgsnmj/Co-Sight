@@ -157,6 +157,30 @@ def get_credibility_model_config() -> dict[str, Optional[str | int | float]]:
     }
 
 
+# ========== 浏览器自动化大模型配置 ==========
+def get_browser_model_config() -> dict[str, Optional[str | int | float]]:
+    """获取浏览器自动化专用API配置，如果缺少配置则退回默认"""
+    browser_api_key = os.environ.get("BROWSER_API_KEY")
+    browser_base_url = os.environ.get("BROWSER_API_BASE_URL")
+    model_name = os.environ.get("BROWSER_MODEL_NAME")
+
+    # 检查三个字段是否都存在且非空
+    if not (browser_api_key and browser_base_url and model_name):
+        return get_model_config()
+
+    max_tokens = os.environ.get("BROWSER_MAX_TOKENS")
+    temperature = os.environ.get("BROWSER_TEMPERATURE")
+
+    return {
+        "api_key": browser_api_key,
+        "base_url": browser_base_url,
+        "model": model_name,
+        "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
+        "temperature": float(temperature) if temperature and temperature.strip() else None,
+        "proxy": os.environ.get("BROWSER_PROXY")
+    }
+
+
 # ========== 工具配置 ==========
 def get_tavily_config() -> Optional[str]:
     """获取tavily兼容API配置"""

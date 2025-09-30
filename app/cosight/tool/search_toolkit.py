@@ -47,13 +47,24 @@ class SearchToolkit:
         import wikipedia
 
         result: str
+        page_url: str = ""
 
         try:
+            # 获取页面摘要
             result = wikipedia.summary(entity, sentences=5, auto_suggest=False)
+            # 获取页面URL
+            page = wikipedia.page(entity, auto_suggest=False)
+            page_url = page.url
         except wikipedia.exceptions.DisambiguationError as e:
+            # 如果有歧义，选择第一个选项
             result = wikipedia.summary(
                 e.options[0], sentences=5, auto_suggest=False
             )
+            try:
+                page = wikipedia.page(e.options[0], auto_suggest=False)
+                page_url = page.url
+            except:
+                pass
         except wikipedia.exceptions.PageError:
             result = (
                 "There is no page in Wikipedia corresponding to entity "
@@ -62,6 +73,11 @@ class SearchToolkit:
             )
         except wikipedia.exceptions.WikipediaException as e:
             result = f"An exception occurred during the search: {e}"
+        
+        # 如果有URL，将URL信息添加到结果中
+        if page_url:
+            result = f"Wikipedia URL: {page_url}\n\nSummary:\n{result}"
+        
         logger.info(f'search_wiki result = {result}')
         return result
 
