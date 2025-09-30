@@ -378,6 +378,7 @@ function getToolDisplayName(toolName) {
         'image_search': 'image_search',
         'file_saver': 'file_save',
         'file_read': 'file_read',
+        'execute_code': 'code_executor',
         'data_analyzer': 'data_analyzer',
         'predictor': 'predictor',
         'report_generator': 'report_generator',
@@ -397,6 +398,7 @@ function getToolDisplayName(toolName) {
         'image_search': '图片搜索',
         'file_saver': '文件保存',
         'file_read': '文件读取',
+        'execute_code': '代码执行器',
         'data_analyzer': '数据分析',
         'predictor': '预测模型',
         'report_generator': '报告生成',
@@ -1231,8 +1233,11 @@ function initInputHandler() {
         });
     }
 
+    // 回放按钮功能已禁用
     // 绑定回放按钮
     if (replayButton) {
+        // 回放功能已隐藏，注释掉事件监听器
+        /*
         replayButton.addEventListener('click', function () {
             try {
                 credibilityService.clearCredibilityData();
@@ -1250,6 +1255,7 @@ function initInputHandler() {
                 window.messageService.sendReplay();
             }
         });
+        */
     }
 
     // 初始化输入框处理
@@ -1613,6 +1619,23 @@ function showRightPanelForTool(toolCall) {
         }, 100); // 增加延迟时间确保清理完成
 
     } else if (path) {
+        // 处理代码执行工具的特殊情况
+        if (path === 'code://execute_code') {
+            // 显示代码内容
+            iframe.style.display = 'none';
+            markdownContent.style.display = 'block';
+
+            if (statusElement) {
+                statusElement.textContent = generateStatusText(tool, url, path);
+                statusElement.className = 'success';
+            }
+
+            // 显示代码内容
+            displayCodeContent(toolCall);
+            console.log('显示代码执行内容');
+            return;
+        }
+
         // 根据扩展名决定渲染方式
         const fileName = path.split('/').pop() || path.split('\\').pop() || '';
         const ext = (fileName.split('.').pop() || '').toLowerCase();
@@ -1697,6 +1720,151 @@ function showRightPanelForTool(toolCall) {
             console.log('显示文件内容:', path);
         }
     }
+}
+
+// 显示代码执行内容
+function displayCodeContent(toolCall) {
+    const markdownContent = document.getElementById('markdown-content');
+    
+    // 解析工具参数获取代码内容
+    let codeContent = '';
+    let executionResult = '';
+    
+    try {
+        // 从工具调用记录中获取代码参数
+        const args = JSON.parse(toolCall.tool_args || '{}');
+        codeContent = args.code || '';
+        
+        // 获取执行结果
+        if (toolCall.result) {
+            executionResult = toolCall.result;
+        }
+    } catch (e) {
+        console.warn('解析代码执行工具参数失败:', e);
+        codeContent = '无法解析代码内容';
+    }
+    
+    // 生成HTML内容
+    const htmlContent = `
+        <div class="code-execution-content">
+            <h3><i class="fas fa-code"></i> 代码执行详情</h3>
+            
+            <div class="code-section">
+                <h4><i class="fas fa-file-code"></i> 执行的代码</h4>
+                <div class="code-block">
+                    <pre><code class="language-python">${escapeHtml(codeContent)}</code></pre>
+                </div>
+            </div>
+            
+            ${executionResult ? `
+            <div class="result-section">
+                <h4><i class="fas fa-terminal"></i> 执行结果</h4>
+                <div class="result-block">
+                    <pre><code>${escapeHtml(executionResult)}</code></pre>
+                </div>
+            </div>
+            ` : ''}
+            
+            <div class="tool-info">
+                <h4><i class="fas fa-info-circle"></i> 工具信息</h4>
+                <ul>
+                    <li><strong>工具名称:</strong> ${toolCall.toolName || '代码执行器'}</li>
+                    <li><strong>执行状态:</strong> <span class="status-${toolCall.status}">${toolCall.status === 'completed' ? '已完成' : toolCall.status === 'running' ? '执行中' : '失败'}</span></li>
+                    ${toolCall.duration ? `<li><strong>执行时间:</strong> ${(toolCall.duration / 1000).toFixed(2)} 秒</li>` : ''}
+                </ul>
+            </div>
+        </div>
+        
+        <style>
+            .code-execution-content {
+                padding: 20px;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                line-height: 1.6;
+            }
+            
+            .code-execution-content h3 {
+                color: #2c3e50;
+                border-bottom: 2px solid #3498db;
+                padding-bottom: 10px;
+                margin-bottom: 20px;
+            }
+            
+            .code-execution-content h4 {
+                color: #34495e;
+                margin: 20px 0 10px 0;
+                font-size: 1.1em;
+            }
+            
+            .code-block, .result-block {
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 8px;
+                padding: 15px;
+                margin: 10px 0;
+                overflow-x: auto;
+            }
+            
+            .code-block pre, .result-block pre {
+                margin: 0;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+            
+            .code-block code {
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 14px;
+                color: #2c3e50;
+            }
+            
+            .result-block code {
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 14px;
+                color: #27ae60;
+            }
+            
+            .tool-info {
+                background: #ecf0f1;
+                border-radius: 8px;
+                padding: 15px;
+                margin-top: 20px;
+            }
+            
+            .tool-info ul {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+            
+            .tool-info li {
+                margin: 8px 0;
+                padding: 5px 0;
+            }
+            
+            .status-completed {
+                color: #27ae60;
+                font-weight: bold;
+            }
+            
+            .status-running {
+                color: #f39c12;
+                font-weight: bold;
+            }
+            
+            .status-failed {
+                color: #e74c3c;
+                font-weight: bold;
+            }
+        </style>
+    `;
+    
+    markdownContent.innerHTML = htmlContent;
+}
+
+// HTML转义函数
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // 加载并显示markdown文件

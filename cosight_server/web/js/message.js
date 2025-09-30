@@ -349,6 +349,19 @@ class MessageService {
                 console.warn('解析文件读取工具参数失败:', e);
             }
         }
+
+        // 处理代码执行工具，为代码内容设置特殊标识
+        if (toolCallRecord.tool_name === 'execute_code') {
+            try {
+                const args = JSON.parse(toolCallRecord.tool_args || '{}');
+                if (args.code) {
+                    // 为execute_code工具设置一个特殊的path标识，表示有代码内容可查看
+                    path = 'code://execute_code';
+                }
+            } catch (e) {
+                console.warn('解析代码执行工具参数失败:', e);
+            }
+        }
         
         // 结果文本
         let resultText = '';
@@ -397,7 +410,9 @@ class MessageService {
             error: toolCallRecord.status === 'failed' ? (window.I18nService ? window.I18nService.t('tool_execution_failed') : '工具执行失败') : null,
             url: url,
             path: path,
-            timestamp: toolCallRecord.timestamp
+            timestamp: toolCallRecord.timestamp,
+            // 为execute_code工具保留原始参数，以便显示代码内容
+            tool_args: toolCallRecord.tool_args
         };
     }
 

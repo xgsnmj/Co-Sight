@@ -48,7 +48,15 @@ class FileToolkit:
                 return error_msg
 
             logger.info(f"Saving content to file: {file_path}")
-            logger.info(f"Content length: {len(str(content)) if content else 0} characters")
+            content_length = len(str(content)) if content else 0
+            logger.info(f"Content length: {content_length} characters")
+            
+            # 检查文件大小并发出警告
+            content_size_mb = len(str(content).encode('utf-8')) / (1024 * 1024) if content else 0
+            if content_size_mb > 5:  # 超过5MB
+                logger.warning(f"Large file detected: {content_size_mb:.2f}MB. This may cause performance issues.")
+            elif content_size_mb > 2:  # 超过2MB
+                logger.warning(f"File size is large: {content_size_mb:.2f}MB. Consider optimizing content.")
 
             # Use the input path if it exists, otherwise use workspace path
             if os.path.exists(file_path):

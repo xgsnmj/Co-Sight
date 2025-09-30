@@ -46,6 +46,7 @@ class BaseAgent:
         self.history = []
         self.plan_id = plan_id
         self._tool_event_sequence = 0  # 工具事件序列号
+        self._file_saver_call_count = {}  # 记录每个步骤的file_saver调用次数
         # Only set plan to None if it hasn't been set by subclass
         if not hasattr(self, 'plan'):
             self.plan = None  # Will be set by subclasses that have access to Plan
@@ -317,6 +318,12 @@ class BaseAgent:
         
         return tool_name_mapping.get(tool_name, tool_name)
 
+    def reset_step_file_saver_count(self, step_index: int):
+        """重置指定步骤的file_saver调用计数"""
+        if step_index in self._file_saver_call_count:
+            del self._file_saver_call_count[step_index]
+            logger.info(f"Reset file_saver call count for step {step_index}")
+
     def _get_verification_steps(self, tool_name: str) -> list[str]:
         """基于工具名称获取验证步骤"""
         name = (tool_name or "").lower()
@@ -476,6 +483,17 @@ class BaseAgent:
 
             if step_index is not None and 'step_index' not in args_dict and function_name in ['mark_step']:
                 args_dict['step_index'] = step_index
+
+            # 检查file_saver调用频率限制
+            if function_name == 'file_saver' and step_index is not None:
+                if step_index not in self._file_saver_call_count:
+                    self._file_saver_call_count[step_index] = 0
+                self._file_saver_call_count[step_index] += 1
+                
+                # 如果当前步骤已经调用过file_saver，给出警告并建议合并
+                if self._file_saver_call_count[step_index] > 1:
+                    logger.warning(f"file_saver called {self._file_saver_call_count[step_index]} times in step {step_index}. "
+                                 f"Consider consolidating file saves to improve performance.")
 
             function_to_call = self.functions[function_name]
 

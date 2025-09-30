@@ -42,6 +42,9 @@ import plotly.io as pio
 import concurrent.futures 
 import threading 
 import io  
+import gzip
+import htmlmin
+import re
 
 from app.common.logger_util import logger
 
@@ -49,6 +52,8 @@ from app.common.logger_util import logger
 MAX_CONTENT_LENGTH = 8000  # 单次LLM调用的最大内容长度
 MAX_FILE_PREVIEW_LENGTH = 1000  # 文件预览的最大长度
 SUMMARY_LENGTH = 500  # 摘要的最大长度
+MAX_HTML_SIZE_MB = 5  # HTML文件最大大小限制（MB）
+WARNING_HTML_SIZE_MB = 2  # HTML文件大小警告阈值（MB）
 
 # 字体配置函数
 def configure_matplotlib_fonts():
@@ -259,6 +264,144 @@ Please return the summary content directly without any prefixes or explanations.
         else:
             # 默认使用摘要
             return self.summarize_content(content, MAX_CONTENT_LENGTH)
+
+    def compress_html(self, html_content: str) -> str:
+        """压缩HTML内容以减少文件大小"""
+        try:
+            # 移除多余的空白字符和换行
+            compressed = htmlmin.minify(
+                html_content,
+                remove_comments=True,
+                remove_empty_space=True,
+                remove_all_empty_space=False,
+                reduce_empty_attributes=True,
+                reduce_boolean_attributes=True,
+                remove_optional_attribute_quotes=True,
+                convert_charrefs=True
+            )
+            
+            # 额外的压缩：移除多余的空格
+            compressed = re.sub(r'\s+', ' ', compressed)
+            compressed = re.sub(r'>\s+<', '><', compressed)
+            
+            return compressed
+        except Exception as e:
+            logger.warning(f"HTML压缩失败，使用原始内容: {e}")
+            return html_content
+
+    def check_html_size(self, html_content: str, file_path: str = None) -> dict:
+        """检查HTML文件大小并提供优化建议"""
+        size_bytes = len(html_content.encode('utf-8'))
+        size_mb = size_bytes / (1024 * 1024)
+        
+        result = {
+            'size_bytes': size_bytes,
+            'size_mb': round(size_mb, 2),
+            'file_path': file_path,
+            'status': 'normal',
+            'warnings': [],
+            'recommendations': []
+        }
+        
+        if size_mb > MAX_HTML_SIZE_MB:
+            result['status'] = 'error'
+            result['warnings'].append(f"HTML文件过大 ({size_mb:.2f}MB)，超过限制 ({MAX_HTML_SIZE_MB}MB)")
+            result['recommendations'].extend([
+                "建议减少图表数量",
+                "建议简化动画效果",
+                "建议移除不必要的交互功能",
+                "建议使用外部CSS/JS文件"
+            ])
+        elif size_mb > WARNING_HTML_SIZE_MB:
+            result['status'] = 'warning'
+            result['warnings'].append(f"HTML文件较大 ({size_mb:.2f}MB)，可能影响性能")
+            result['recommendations'].extend([
+                "考虑减少图表数量",
+                "考虑简化动画效果"
+            ])
+        
+        logger.info(f"HTML文件大小检查: {size_mb:.2f}MB - {result['status']}")
+        return result
+
+    def generate_lightweight_html_template(self) -> str:
+        """生成轻量级HTML模板，减少文件大小"""
+        return """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <style>
+        * {{ margin:0; padding:0; box-sizing:border-box }}
+        body {{ font-family:Arial,sans-serif; line-height:1.6; color:#333 }}
+        .container {{ max-width:1200px; margin:0 auto; padding:20px }}
+        h1 {{ color:#2c3e50; margin-bottom:20px }}
+        h2 {{ color:#34495e; margin:20px 0 10px }}
+        .section {{ margin-bottom:30px; padding:20px; background:#f9f9f9; border-radius:5px }}
+        .chart {{ margin:20px 0; text-align:center }}
+        .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:15px; margin:20px 0 }}
+        .metric {{ background:#fff; padding:15px; border-radius:5px; text-align:center; box-shadow:0 2px 5px rgba(0,0,0,0.1) }}
+        .metric-value {{ font-size:2em; font-weight:bold; color:#3498db }}
+        @media (max-width:768px) {{ .metrics {{ grid-template-columns:1fr }} }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+        <div class="meta">生成日期: {now}</div>
+        
+        <div class="metrics">{metrics_html}</div>
+        
+        {content_html}
+    </div>
+</body>
+</html>"""
+
+    def generate_lightweight_html_report(self, outline, sections, user_query):
+        """生成轻量级HTML报告，减少文件大小"""
+        template = self.generate_lightweight_html_template()
+        
+        # 生成内容HTML
+        content_html = ""
+        for i, section in enumerate(sections):
+            content_html += f'<div class="section">'
+            content_html += f'<h2>{section["title"]}</h2>'
+            
+            for j, subsection in enumerate(section.get('subsections', [])):
+                content_html += f'<div class="subsection">'
+                content_html += f'<h3>{subsection["title"]}</h3>'
+                content_html += f'<p>{subsection["content"]}</p>'
+                content_html += '</div>'
+            
+            content_html += '</div>'
+        
+        # 生成指标HTML（简化版）
+        metrics_html = ""
+        if sections:
+            total_sections = len(sections)
+            total_subsections = sum(len(s.get('subsections', [])) for s in sections)
+            metrics_html = f'''
+            <div class="metric">
+                <div class="metric-value">{total_sections}</div>
+                <div>主要章节</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{total_subsections}</div>
+                <div>子章节</div>
+            </div>
+            '''
+        
+        # 填充模板
+        html_content = template.format(
+            title=outline.get('title', '报告'),
+            subtitle=outline.get('subtitle', ''),
+            now=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            metrics_html=metrics_html,
+            content_html=content_html
+        )
+        
+        return html_content
     
     def ask_llm(self, prompt):
         """通过LLM获取回答"""
@@ -476,6 +619,31 @@ Please return the summary content directly without any prefixes or explanations.
             # 步骤5: 使用商务风格主题生成HTML报告
             logger.info(f"\n[步骤5/6] 生成HTML报告")
             html_content = self.generate_html_report_with_apple_theme(outline, sections, visualizations, user_query)
+            
+            # 步骤5.5: 检查HTML文件大小并进行优化
+            logger.info(f"\n[步骤5.5/6] 检查HTML文件大小")
+            size_check = self.check_html_size(html_content)
+            
+            if size_check['status'] == 'error':
+                logger.warning("HTML文件过大，尝试使用轻量级模板")
+                # 使用轻量级模板重新生成
+                html_content = self.generate_lightweight_html_report(outline, sections, user_query)
+                size_check = self.check_html_size(html_content)
+            
+            # 压缩HTML内容
+            logger.info(f"\n[步骤5.6/6] 压缩HTML内容")
+            original_size = len(html_content)
+            html_content = self.compress_html(html_content)
+            compressed_size = len(html_content)
+            compression_ratio = (original_size - compressed_size) / original_size * 100
+            
+            logger.info(f"HTML压缩完成: {original_size/1024:.1f}KB -> {compressed_size/1024:.1f}KB (压缩率: {compression_ratio:.1f}%)")
+            
+            # 最终大小检查
+            final_size_check = self.check_html_size(html_content)
+            if final_size_check['warnings']:
+                for warning in final_size_check['warnings']:
+                    logger.warning(f"HTML大小警告: {warning}")
             
             # 步骤6: 保存HTML报告
             logger.info(f"\n[步骤6/6] 保存HTML报告")

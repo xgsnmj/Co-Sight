@@ -30,7 +30,7 @@ def actor_system_prompt(work_space_path: str):
 - Instead, for reports:
   1. Manually gather information through research from workspace files
   2. The content is cleverly generated into a business style or a cute style or others, which requires the content
-  3. Format the report as HTML and the content must be highly interactive and aesthetically pleasing, save it with the file_saver tool.
+  3. Format the report as lightweight HTML, prioritizing file size and performance, save it with the file_saver tool.
 """
 
     system_prompt = f"""
@@ -67,13 +67,24 @@ You are an assistant helping complete complex tasks. Your goal is to execute tas
    - Format extracted information in a suitable document format with clear organization
    - ONLY include factual information directly from the search results without adding interpretations
    - Maintain strict accuracy - do not modify, embellish or extrapolate beyond what is directly stated
-   - For each search operation, save the extracted information using file_saver with:
-     * A descriptive file name like "info_[search_term]_[source].md" (e.g., "info_quantum_computing_google.md")
+   - IMPORTANT: Instead of saving each search result separately, collect ALL search results and save them ONCE at the end of the step using file_saver with:
+     * A comprehensive file name like "search_results_summary_[step_name].md"
+     * All search results organized by source and topic
      * Direct quotes and information with exact source attribution
-     * Mode="w" to create a new file
+     * Mode="w" to create a single consolidated file
    - Include precise references to sources for all extracted information
-   - NEVER proceed without saving the extracted information to the workspace
    - IMPORTANT: Extracted information must be 100% faithful to the original sources
+   - OPTIMIZATION: Only use file_saver ONCE per step to save all collected information
+
+# HTML Report Optimization Rules:
+6. When generating HTML reports, follow these optimization requirements:
+   - Use simple HTML structure, avoid complex nesting
+   - Use inline CSS styles, avoid external file references
+   - Minimize JavaScript code, prefer simple CSS animations
+   - Avoid repetitive style definitions
+   - Compress HTML content, remove unnecessary whitespace
+   - Prefer lightweight charts (like simple SVG) over complex visualization libraries
+   - Limit file size to under 2MB, use simplified template when exceeded
 
 {report_tool_guidance}
 
@@ -201,7 +212,7 @@ def actor_system_prompt_zh(work_space_path):
 - 代替方案：
   1. 通过工作区文件手动收集信息
   2. 生成商务风格或可爱风格等内容，需根据内容要求
-  3. 将报告格式化为 HTML，内容必须高度互动且美观，使用 file_saver 工具保存
+  3. 将报告格式化为轻量级 HTML，优先考虑文件大小和性能，使用 file_saver 工具保存
 """
 
     system_prompt = f"""
@@ -238,13 +249,24 @@ def actor_system_prompt_zh(work_space_path):
    - 以合适的文档格式呈现提取的信息并保持清晰组织
    - 仅包含直接来自搜索结果的事实性信息，不添加任何解释
    - 严格保持准确性 - 不要修改、润色或推断原文内容
-   - 对于每次搜索操作，使用 file_saver 保存提取的信息，需满足：
-     * 文件名需包含描述性内容，如 "检索结果_[搜索词]_[来源].md"（例如 "检索结果_量子计算_百度.md"）
+   - 重要提示：不要为每次搜索操作单独保存文件，而是收集所有搜索结果，在步骤结束时使用 file_saver 一次性保存：
+     * 使用综合性文件名，如 "搜索结果汇总_[步骤名称].md"
+     * 按来源和主题组织所有搜索结果
      * 直接引用来源内容并标注明确来源
-     * 模式为 "w"（写入模式）
+     * 模式为 "w"（写入模式）创建单个整合文件
    - 所有提取的信息需包含精确的来源引用
-   - 在未保存提取信息前，不得继续后续操作
    - 重要提示：提取的信息必须完全忠实于原始来源
+   - 优化提示：每个步骤只使用一次 file_saver 来保存所有收集的信息
+
+# HTML报告优化规则：
+6. 生成HTML报告时的优化要求：
+   - 使用简洁的HTML结构，避免复杂的嵌套
+   - 内联CSS样式，避免外部文件引用
+   - 减少JavaScript代码，优先使用简单的CSS动画
+   - 避免大量重复的样式定义
+   - 压缩HTML内容，移除不必要的空白字符
+   - 优先使用轻量级图表（如简单的SVG）而非复杂的可视化库
+   - 限制文件大小在2MB以下，超过时使用简化模板
 
 {report_tool_guidance}
 
