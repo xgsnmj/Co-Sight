@@ -3,8 +3,15 @@
 
 // DAG图全局变量
 let svg, width, height, simulation;
-let tooltip = d3.select("#tooltip");
+let tooltip = null; // 延迟初始化，等待DOM加载
 let zoom = null; // 缩放功能
+
+// 确保tooltip已初始化
+function ensureTooltipInitialized() {
+    if (!tooltip) {
+        tooltip = d3.select("#tooltip");
+    }
+}
 
 // 计算层次化布局
 function calculateHierarchicalLayout() {
@@ -136,6 +143,9 @@ function calculateHierarchicalLayout() {
 
 // 初始化DAG可视化
 function initDAG() {
+    // 确保tooltip已初始化
+    ensureTooltipInitialized();
+    
     const container = d3.select("#dag-svg");
     width = container.node().clientWidth;
     height = container.node().clientHeight;
@@ -521,8 +531,28 @@ function addNodeIndicator(nodeElement, nodeId, groupClass, transform, fillColor,
 // 创建DAG图 - 处理从后端推送的 lui-message-manus-step 消息
 function createDag(messageData) {
     try {
-        // 解析消息数据
-        const initData = messageData.data.initData;
+        // 解析消息数据 - 根据实际数据结构调整
+        // 支持多种数据格式：
+        // 1. messageData.data.content (WebSocket封装后的格式)
+        // 2. messageData.content (直接格式)
+        // 3. messageData.data.initData (旧格式兼容)
+        const initData = messageData.data?.content || messageData.content || messageData.data?.initData;
+        
+        // 调试日志：检查传入的数据结构
+        console.log('=============== createDag 开始 ===============');
+        console.log('1. 原始 messageData:', JSON.stringify(messageData, null, 2));
+        console.log('2. messageData.data 存在:', !!messageData.data);
+        console.log('3. messageData.data?.content 存在:', !!messageData.data?.content);
+        console.log('4. messageData.data?.content:', messageData.data?.content);
+        console.log('5. messageData.content 存在:', !!messageData.content);
+        console.log('6. messageData.content:', messageData.content);
+        console.log('7. messageData.data?.initData 存在:', !!messageData.data?.initData);
+        console.log('8. 最终获取的 initData:', initData);
+        console.log('9. initData?.step_notes 存在:', !!initData?.step_notes);
+        console.log('10. initData?.step_notes:', initData?.step_notes);
+        console.log('11. initData?.steps:', initData?.steps);
+        console.log('12. initData?.step_statuses:', initData?.step_statuses);
+        console.log('============================================');
         
         // 新会话检测：当 changeType=replace 或 话题/uuid 变化时，重置缓存
         // try {
@@ -607,13 +637,35 @@ function createDag(messageData) {
             
             console.log(`步骤${stepId}的依赖:`, dependencies);
             
-            return {
+            // 详细调试日志
+            console.log(`======= 构建节点 ${stepId} (${step}) =======`);
+            console.log('  步骤名称 (step):', step);
+            console.log('  initData 对象:', initData);
+            console.log('  initData.step_notes 存在:', !!initData.step_notes);
+            console.log('  initData.step_notes 类型:', typeof initData.step_notes);
+            console.log('  initData.step_notes 内容:', initData.step_notes);
+            console.log('  initData.step_notes 的所有键:', initData.step_notes ? Object.keys(initData.step_notes) : 'N/A');
+            console.log('  initData.step_notes[step] 值:', initData.step_notes ? initData.step_notes[step] : 'N/A');
+            console.log('  initData.step_statuses[step] 值:', initData.step_statuses ? initData.step_statuses[step] : 'N/A');
+            
+            const stepNotesValue = initData.step_notes ? (initData.step_notes[step] || "") : "";
+            console.log('  计算出的 stepNotesValue:', stepNotesValue);
+            
+            const nodeData = {
                 id: stepId,
                 name: `step${stepId}`,
                 fullName: step,  // 保留完整名称用于其他用途
                 status: initData.step_statuses[step] || "not_started",
+                step_notes: stepNotesValue,
                 dependencies: dependencies
             };
+            
+            console.log('  最终节点数据:', nodeData);
+            console.log('  最终节点 step_notes 值:', nodeData.step_notes);
+            console.log('  最终节点 step_notes 长度:', nodeData.step_notes ? nodeData.step_notes.length : 0);
+            console.log('======================================');
+            
+            return nodeData;
         });
 
         // 构建边数据
@@ -645,6 +697,14 @@ function createDag(messageData) {
         // 更新全局DAG数据
         dagData.nodes = newDagData.nodes;
         dagData.edges = newDagData.edges;
+        
+        // 强制确保step_notes字段存在
+        dagData.nodes.forEach(node => {
+            if (!node.hasOwnProperty('step_notes')) {
+                node.step_notes = "";
+                console.log(`为节点 ${node.id} 添加缺失的step_notes字段`);
+            }
+        });
 
         // 清空现有的SVG内容
         if (svg) {

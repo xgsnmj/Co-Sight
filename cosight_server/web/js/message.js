@@ -47,25 +47,29 @@ class MessageService {
             }
 
             // 处理 lui-message-tool-event 类型的消息
-            if (messageData.data && messageData.data.type === 'lui-message-tool-event') {
+            // 支持 contentType 和 type 两种字段名以保持兼容性
+            const messageType = messageData.data?.contentType || messageData.data?.type;
+            
+            if (messageType === 'lui-message-tool-event') {
                 console.log('收到 lui-message-tool-event 消息:', messageData);
                 this.handleToolEvent(messageData);
                 return;
             }
 
             // 处理 lui-message-credibility-analysis 类型的消息
-            if (messageData.data && messageData.data.type === 'lui-message-credibility-analysis') {
+            if (messageType === 'lui-message-credibility-analysis') {
                 console.log('收到 lui-message-credibility-analysis 消息:', messageData);
                 credibilityService.credibilityMessageHandler(messageData);
                 return;
             }
 
             // 检查是否是 lui-message-manus-step 类型的消息
-            if (messageData.data && messageData.data.type === 'lui-message-manus-step') {
+            if (messageType === 'lui-message-manus-step') {
                 console.log('收到 lui-message-manus-step 消息，开始创建DAG图');
+                console.log('完整消息数据:', messageData);
                 this.stepMessageHandler(messageData);
             } else {
-                console.log('收到其他类型的消息:', messageData.data?.type || 'unknown');
+                console.log('收到其他类型的消息:', messageType || 'unknown');
             }
         } catch (error) {
             console.error('处理消息时发生错误:', error);
@@ -89,16 +93,22 @@ class MessageService {
             console.warn('保存本地状态失败:', e);
         }
 
+        // 获取initData，支持多种格式
+        const initData = messageData.data?.content || messageData.data?.initData;
+        
         // 显示标题信息
-        updateDynamicTitle(messageData.data.initData.title);
-        showStepsTooltip();
-        setTimeout(() => {
-            hideStepsTooltip();
-        }, 3000);
+        if (initData && initData.title) {
+            updateDynamicTitle(initData.title);
+            showStepsTooltip();
+            setTimeout(() => {
+                hideStepsTooltip();
+            }, 3000);
+        }
+        
         // 在接收到步骤状态更新后，自动关闭已完成且无运行中工具的步骤面板
         try {
-            if (messageData?.data?.initData) {
-                this._autoCloseCompletedStepPanels(messageData.data.initData);
+            if (initData) {
+                this._autoCloseCompletedStepPanels(initData);
             }
         } catch (e) {
             console.warn('自动关闭完成步骤面板时发生异常:', e);
@@ -131,13 +141,27 @@ class MessageService {
      * 处理tool event消息
      */
     handleToolEvent(messageData) {
-        // 兼容两种数据格式：直接在initData中，或者在initData.plan中
-        const toolEventData = messageData.data.initData.plan || messageData.data.initData;
+        // 兼容多种数据格式：
+        // 1. messageData.data.content (标准格式，contentType字段)
+        // 2. messageData.data.initData.plan (旧格式)
+        // 3. messageData.data.initData (旧格式)
+        const toolEventData = messageData.data?.content || messageData.data?.initData?.plan || messageData.data?.initData;
+        
+        if (!toolEventData) {
+            console.warn('无法获取tool event数据:', messageData);
+            return;
+        }
+        
         const stepIndex = toolEventData.step_index;
         const eventType = toolEventData.event_type;
         
         console.log(`处理tool event: ${eventType}, step: ${stepIndex}, tool: ${toolEventData.tool_name}`);
         console.log('完整的toolEventData:', toolEventData);
+        
+        // 特殊处理 mark_step 工具事件，更新节点的 step_notes
+        if (toolEventData.tool_name === 'mark_step' && eventType === 'tool_complete') {
+            this.handleMarkStepEvent(toolEventData);
+        }
 
         // 确保stepIndex对应的数组存在
         if (!this.stepToolEvents.has(stepIndex)) {
@@ -243,6 +267,45 @@ class MessageService {
 
         // 持久化最新的step tool events
         this.persistStepToolEvents();
+    }
+
+    /**
+     * 处理 mark_step 工具事件，更新节点的 step_notes
+     */
+    handleMarkStepEvent(toolEventData) {
+        try {
+            const stepIndex = toolEventData.step_index;
+            const nodeId = stepIndex + 1; // stepIndex从0开始，DAG节点ID从1开始
+            
+            // 从tool_args中提取step_notes
+            let stepNotes = '';
+            if (toolEventData.tool_args) {
+                try {
+                    const args = JSON.parse(toolEventData.tool_args);
+                    stepNotes = args.step_notes || '';
+                } catch (e) {
+                    console.warn('解析mark_step工具参数失败:', e);
+                    return;
+                }
+            }
+            
+            console.log(`handleMarkStepEvent: stepIndex=${stepIndex}, nodeId=${nodeId}, step_notes=`, stepNotes);
+            
+            // 更新dagData中对应节点的step_notes
+            if (typeof dagData !== 'undefined' && dagData.nodes) {
+                const node = dagData.nodes.find(n => n.id === nodeId);
+                if (node) {
+                    node.step_notes = stepNotes;
+                    console.log(`已更新节点 ${nodeId} 的 step_notes:`, stepNotes);
+                } else {
+                    console.warn(`未找到节点 ID ${nodeId}`);
+                }
+            } else {
+                console.warn('dagData 未定义或没有 nodes 数组');
+            }
+        } catch (error) {
+            console.error('处理mark_step事件时发生错误:', error);
+        }
     }
 
     /**

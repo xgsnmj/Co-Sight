@@ -488,12 +488,18 @@ Please start analysis:"""
             ensure_line(safe_result["derived_facts"], f"推导：完成'{step_title}'降低后续不确定性（推理）")
             ensure_line(safe_result["educated_guess"], f"估计：{('工具显示' + tools_hint) if tools_hint else '依据上下文保守判断'}（猜测）")
 
+        # 清理和去重结果，但保持LLM生成的完整内容
         for k in safe_result:
             compact = []
             for item in safe_result[k][:2]:
                 s = (item or "").strip()
-                if len(s) > 50:
-                    s = s[:50]
+                # 根据语言设置合理的最大长度限制
+                # 中文：150字符（约等于prompt要求的100字加上标点和来源标注）
+                # 英文：200字符（约等于prompt要求的50单词）
+                max_length = 200 if language == 'en' else 150
+                if len(s) > max_length:
+                    # 只有超过合理长度时才截断，并添加省略号
+                    s = s[:max_length] + "..."
                 if s and s not in compact:
                     compact.append(s)
             safe_result[k] = compact

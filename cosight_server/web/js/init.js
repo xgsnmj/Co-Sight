@@ -84,6 +84,25 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // 为tooltip添加鼠标事件，允许用户移动到tooltip上点击链接
+    const tooltipElement = document.getElementById('tooltip');
+    if (tooltipElement) {
+        tooltipElement.addEventListener('mouseenter', function () {
+            // 清除隐藏定时器，保持tooltip显示
+            if (typeof tooltipTimeout !== 'undefined' && tooltipTimeout) {
+                clearTimeout(tooltipTimeout);
+                tooltipTimeout = null;
+            }
+        });
+
+        tooltipElement.addEventListener('mouseleave', function () {
+            // 鼠标离开tooltip时隐藏
+            if (typeof hideTooltip === 'function') {
+                hideTooltip();
+            }
+        });
+    }
+
     // 为动态标题添加hover事件
     const dynamicTitle = document.getElementById('dynamic-title');
     if (dynamicTitle) {

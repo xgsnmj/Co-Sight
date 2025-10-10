@@ -605,11 +605,25 @@ body {
     padding: 12px;
     border-radius: 8px;
     font-size: 14px;
-    pointer-events: none;
+    pointer-events: auto;
     z-index: 1000;
-    max-width: 380px;
+    max-width: 450px;
+    min-width: 300px;
+    max-height: 400px;
+    overflow-y: auto;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.tooltip a {
+    color: #4CAF50;
+    text-decoration: underline;
+}
+
+.tooltip a:hover {
+    color: #66bb6a;
 }
 
 .tooltip hr {

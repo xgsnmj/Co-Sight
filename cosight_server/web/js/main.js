@@ -71,8 +71,15 @@ function hideVerificationTooltip() {
     }, 100);
 }
 
+
+
 // 显示工具提示
 function showTooltip(event, d, showStatus = true) {
+    // 确保tooltip已初始化
+    if (typeof ensureTooltipInitialized === 'function') {
+        ensureTooltipInitialized();
+    }
+    
     // 清除之前的隐藏定时器
     if (tooltipTimeout) {
         clearTimeout(tooltipTimeout);
@@ -82,8 +89,10 @@ function showTooltip(event, d, showStatus = true) {
     // 计算工具提示位置，避免超出屏幕
     const x = event.pageX + 10;
     const y = event.pageY - 10;
-    const tooltipWidth = 380;
-    const tooltipHeight = 150;
+    const tooltipWidth = 450;
+    // 如果有step_notes，需要更大的高度空间
+    const hasStepNotes = d.step_notes && d.step_notes.trim();
+    const tooltipHeight = hasStepNotes ? 400 : 150;
 
     let finalX = x;
     let finalY = y;
@@ -97,8 +106,38 @@ function showTooltip(event, d, showStatus = true) {
     if (y + tooltipHeight > window.innerHeight) {
         finalY = event.pageY - tooltipHeight - 10;
     }
-
+    
+    // 构建step_notes显示内容
+    let stepNotesHtml = '';
+    if (hasStepNotes) {
+        // 处理step_notes中的文件路径，转换为可点击的链接
+        let notesContent = d.step_notes;
+        
+        // 检测并转换文件路径为可点击链接
+        // 匹配 /api/nae-deep-research/v1/work_space/ 或 work_space/ 开头的路径
+        const pathRegex = /(\/api\/nae-deep-research\/v1\/work_space\/[^\s\n]+|work_space\/[^\s\n]+)/g;
+        notesContent = notesContent.replace(pathRegex, (match) => {
+            // 提取文件名
+            const fileName = match.split('/').pop();
+            const fullPath = match.startsWith('/api/') ? match : `/api/nae-deep-research/v1/${match}`;
+            return `<a href="#" onclick="openFileInRightPanel('${fullPath}'); event.preventDefault(); event.stopPropagation(); return false;" style="color: #4CAF50; text-decoration: underline; cursor: pointer;" title="点击查看文件">${fileName}</a>`;
+        });
+        
+        stepNotesHtml = `<div style="margin-top: 8px; padding: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; max-height: 200px; overflow-y: auto;">
+            <strong style="font-size: 12px;">${(window.I18nService ? window.I18nService.t('step_notes') : '步骤说明')}:</strong><br/>
+            <span style="font-size: 11px; line-height: 1.5; white-space: pre-wrap;">${notesContent}</span>
+           </div>`;
+    }
+    const stepNotes = stepNotesHtml;
+    
     const status = showStatus ? `<em>${(window.I18nService ? window.I18nService.t('status') : '状态')}: ${getStatusText(d.status)}</em><br/>` : '';
+    
+    // 确保tooltip已初始化再使用
+    if (!tooltip) {
+        console.warn('Tooltip未初始化');
+        return;
+    }
+    
     tooltip
         .style("opacity", 0)
         .style("left", finalX + "px")
@@ -107,6 +146,7 @@ function showTooltip(event, d, showStatus = true) {
             <strong>${d.name} - ${(d.fullName || d.title || '')}</strong><br/>
             <hr>
             ${status}
+            ${stepNotes}
         `)
         .transition()
         .duration(200)
@@ -115,12 +155,19 @@ function showTooltip(event, d, showStatus = true) {
 
 // 隐藏工具提示
 function hideTooltip() {
+    // 确保tooltip已初始化
+    if (typeof ensureTooltipInitialized === 'function') {
+        ensureTooltipInitialized();
+    }
+    
     // 添加延迟隐藏，避免鼠标快速移动时闪烁
     tooltipTimeout = setTimeout(() => {
-        tooltip
-            .transition()
-            .duration(200)
-            .style("opacity", 0);
+        if (tooltip) {
+            tooltip
+                .transition()
+                .duration(200)
+                .style("opacity", 0);
+        }
     }, 100);
 }
 
@@ -1484,11 +1531,12 @@ function checkAndRestoreDAGData() {
             console.log('发现保存的DAG数据，开始恢复...');
             
             // 恢复DAG图
-            const result = createDag({ data: lastManusStep.data, topic: 'restored' });
+            const result = createDag(lastManusStep);
             if (result) {
                 // 显示标题
-                if (lastManusStep.data.initData && lastManusStep.data.initData.title) {
-                    updateDynamicTitle(lastManusStep.data.initData.title);
+                const initData = lastManusStep.content || lastManusStep.data?.initData;
+                if (initData && initData.title) {
+                    updateDynamicTitle(initData.title);
                 }
                 
                 // 显示主界面
@@ -1599,7 +1647,17 @@ function showRightPanelForTool(toolCall) {
 
         // 将绝对路径转换为相对路径（与 loadMarkdownFile 保持一致）
         let relativePath = path;
-        if (relativePath.includes('workspace')) {
+        // 如果路径已经是完整的API路径（以/api/开头），直接使用
+        if (relativePath.startsWith('/api/')) {
+            relativePath = path;
+        } else if (relativePath.includes('work_space')) {
+            // 提取work_space之后的路径部分
+            const workspaceIndex = relativePath.indexOf('work_space');
+            if (workspaceIndex !== -1) {
+                relativePath = relativePath.substring(workspaceIndex);
+            }
+        } else if (relativePath.includes('workspace')) {
+            // 兼容旧的workspace命名
             const workspaceIndex = relativePath.indexOf('workspace');
             if (workspaceIndex !== -1) {
                 relativePath = relativePath.substring(workspaceIndex);
@@ -1840,8 +1898,17 @@ function loadMarkdownFile(filePath, tool) {
 
     // 将绝对路径转换为相对路径
     let relativePath = filePath;
-    if (filePath.includes('workspace')) {
-        // 提取workspace之后的路径部分
+    // 如果路径已经是完整的API路径（以/api/开头），直接使用
+    if (filePath.startsWith('/api/')) {
+        relativePath = filePath;
+    } else if (filePath.includes('work_space')) {
+        // 提取work_space之后的路径部分
+        const workspaceIndex = filePath.indexOf('work_space');
+        if (workspaceIndex !== -1) {
+            relativePath = filePath.substring(workspaceIndex);
+        }
+    } else if (filePath.includes('workspace')) {
+        // 兼容旧的workspace命名
         const workspaceIndex = filePath.indexOf('workspace');
         if (workspaceIndex !== -1) {
             relativePath = filePath.substring(workspaceIndex);

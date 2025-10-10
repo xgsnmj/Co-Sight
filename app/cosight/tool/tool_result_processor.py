@@ -27,6 +27,64 @@ from app.common.logger_util import logger
 class ToolResultProcessor:
     """工具结果处理器，针对不同工具类型处理结果"""
     
+    # 可配置的域名过滤列表（通过环境变量 IFRAME_BLOCKED_DOMAINS 设置，逗号分隔）
+    # 例如: export IFRAME_BLOCKED_DOMAINS="ainvest.com,example.com"
+    _cached_blocked_domains = None
+    
+    @staticmethod
+    def _get_blocked_domains() -> list:
+        """
+        获取配置的不可嵌入域名列表
+        支持通过环境变量 IFRAME_BLOCKED_DOMAINS 配置（逗号分隔）
+        
+        Returns:
+            list: 域名列表
+        """
+        if ToolResultProcessor._cached_blocked_domains is not None:
+            return ToolResultProcessor._cached_blocked_domains
+            
+        # 从环境变量读取
+        blocked_domains_str = os.environ.get('IFRAME_BLOCKED_DOMAINS', '')
+        if blocked_domains_str:
+            domains = [d.strip().lower() for d in blocked_domains_str.split(',') if d.strip()]
+            ToolResultProcessor._cached_blocked_domains = domains
+            logger.info(f"从环境变量加载iframe黑名单域名: {domains}")
+        else:
+            ToolResultProcessor._cached_blocked_domains = []
+            
+        return ToolResultProcessor._cached_blocked_domains
+    
+    @staticmethod
+    def _is_domain_blocked(url: str) -> bool:
+        """
+        检查URL的域名是否在配置的黑名单中
+        
+        Args:
+            url: 要检查的URL
+            
+        Returns:
+            bool: 如果在黑名单中返回True
+        """
+        blocked_domains = ToolResultProcessor._get_blocked_domains()
+        if not blocked_domains:
+            return False
+            
+        try:
+            from urllib.parse import urlparse
+            parsed_url = urlparse(url)
+            domain = parsed_url.netloc.lower()
+            # 移除 www. 前缀进行匹配
+            domain_without_www = domain.replace('www.', '')
+            
+            for blocked_domain in blocked_domains:
+                if domain_without_www == blocked_domain or domain_without_www.endswith('.' + blocked_domain):
+                    logger.info(f"URL {url} 的域名 {domain} 在配置的iframe黑名单中")
+                    return True
+            return False
+        except Exception as e:
+            logger.warning(f"检查域名黑名单时出错: {e}")
+            return False
+    
     @staticmethod
     def _detect_language_from_content(content: str) -> str:
         """
@@ -116,12 +174,23 @@ class ToolResultProcessor:
         检查给定URL是否可以在电脑区正常打开和嵌入
         通过实际HTTP请求检测URL的可访问性和iframe嵌入能力
         
+        检测策略：
+        1. 检查域名是否在配置的黑名单中（可选，通过环境变量配置）
+        2. 发送HTTP请求检查可访问性
+        3. 分析HTTP响应头（X-Frame-Options, CSP等）
+        4. 检测内容类型和大小
+        5. 对于HTML页面，尝试检测JavaScript反iframe模式
+        
         Args:
             url: 要检查的URL
             
         Returns:
             bool: 如果可以正常打开并嵌入返回True，否则返回False
         """
+        # 1. 检查域名是否在配置的黑名单中（可通过环境变量 IFRAME_BLOCKED_DOMAINS 配置）
+        if ToolResultProcessor._is_domain_blocked(url):
+            return False
+        
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -141,75 +210,153 @@ class ToolResultProcessor:
                     "https": proxy_url
                 }
             
-            # 发送HEAD请求检查URL的可访问性和HTTP头
-            with requests.head(url, headers=headers, timeout=15, allow_redirects=True, 
-                             verify=False, proxies=proxies) as response:
-                
-                # 检查HTTP状态码
-                if response.status_code >= 400:
-                    logger.info(f"URL {url} 返回错误状态码 {response.status_code}，无法访问")
+            response = None
+            # 先尝试HEAD请求，如果失败再尝试GET请求（只获取少量数据）
+            try:
+                # 发送HEAD请求检查URL的可访问性和HTTP头，缩短超时时间到8秒
+                response = requests.head(url, headers=headers, timeout=8, allow_redirects=True, 
+                                       verify=False, proxies=proxies)
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                logger.info(f"URL {url} HEAD请求失败 ({type(e).__name__})，尝试GET请求")
+                # HEAD请求失败，尝试GET请求（只获取前1KB数据）
+                try:
+                    response = requests.get(url, headers=headers, timeout=8, allow_redirects=True, 
+                                          verify=False, proxies=proxies, stream=True)
+                    # 只读取少量数据
+                    response.raw.read(1024, decode_content=True)
+                except Exception as get_error:
+                    logger.warning(f"URL {url} GET请求也失败: {get_error}")
                     return False
-                
-                # 头信息不区分大小写，所以将键转换为小写
-                response_headers = {k.lower(): v for k, v in response.headers.items()}
-                
-                # 1. 检查Content-Type - 非HTML内容不适合iframe嵌入
-                content_type = response_headers.get('content-type', '').lower()
-                if content_type:
-                    if 'application/pdf' in content_type:
-                        logger.info(f"URL {url} 是PDF文件，不适合iframe嵌入")
-                        return False
-                    if 'application/' in content_type and 'text/html' not in content_type:
-                        logger.info(f"URL {url} 的Content-Type不是HTML: {content_type}，不适合iframe嵌入")
-                        return False
-                    if 'image/' in content_type:
-                        logger.info(f"URL {url} 是图片文件，不适合iframe嵌入")
-                        return False
-                
-                # 2. 检查 X-Frame-Options 头 - 明确禁止嵌入
-                x_frame_options = response_headers.get('x-frame-options', '').lower()
-                if x_frame_options in ('deny', 'sameorigin'):
-                    logger.info(f"URL {url} 设置了 X-Frame-Options: {x_frame_options}，禁止iframe嵌入")
+            
+            if response is None:
+                logger.warning(f"URL {url} 无法获取响应")
+                return False
+            
+            # 检查HTTP状态码
+            if response.status_code >= 400:
+                logger.info(f"URL {url} 返回错误状态码 {response.status_code}，无法访问")
+                return False
+            
+            # 头信息不区分大小写，所以将键转换为小写
+            response_headers = {k.lower(): v for k, v in response.headers.items()}
+            
+            # 1. 检查Content-Type - 非HTML内容不适合iframe嵌入
+            content_type = response_headers.get('content-type', '').lower()
+            if content_type:
+                if 'application/pdf' in content_type:
+                    logger.info(f"URL {url} 是PDF文件，不适合iframe嵌入")
                     return False
-                
-                # 3. 检查 Content-Security-Policy 头中的 frame-ancestors
-                csp = response_headers.get('content-security-policy', '').lower()
-                if 'frame-ancestors' in csp:
-                    if "'none'" in csp:
-                        logger.info(f"URL {url} 设置了 CSP frame-ancestors: none，禁止iframe嵌入")
+                if 'application/' in content_type and 'text/html' not in content_type:
+                    logger.info(f"URL {url} 的Content-Type不是HTML: {content_type}，不适合iframe嵌入")
+                    return False
+                if 'image/' in content_type:
+                    logger.info(f"URL {url} 是图片文件，不适合iframe嵌入")
+                    return False
+            
+            # 2. 检查 X-Frame-Options 头 - 明确禁止嵌入
+            x_frame_options = response_headers.get('x-frame-options', '').lower()
+            if x_frame_options in ('deny', 'sameorigin'):
+                logger.info(f"URL {url} 设置了 X-Frame-Options: {x_frame_options}，禁止iframe嵌入")
+                return False
+            
+            # 3. 检查 Content-Security-Policy 头中的 frame-ancestors
+            csp = response_headers.get('content-security-policy', '').lower()
+            if 'frame-ancestors' in csp:
+                if "'none'" in csp:
+                    logger.info(f"URL {url} 设置了 CSP frame-ancestors: none，禁止iframe嵌入")
+                    return False
+                if "'self'" in csp:
+                    logger.info(f"URL {url} 设置了 CSP frame-ancestors: self，禁止iframe嵌入")
+                    return False
+                # 如果没有通配符，也认为不允许跨域嵌入
+                if '*' not in csp:
+                    logger.info(f"URL {url} 的 CSP frame-ancestors 不包含通配符，禁止iframe嵌入")
+                    return False
+            
+            # 4. 检查响应大小 - 过大的内容不适合iframe
+            content_length = response_headers.get('content-length')
+            if content_length:
+                try:
+                    size_mb = int(content_length) / (1024 * 1024)
+                    if size_mb > 50:  # 超过50MB认为过大
+                        logger.info(f"URL {url} 内容过大 ({size_mb:.1f}MB)，不适合iframe嵌入")
                         return False
-                    if "'self'" in csp:
-                        logger.info(f"URL {url} 设置了 CSP frame-ancestors: self，禁止iframe嵌入")
-                        return False
-                    # 如果没有通配符，也认为不允许跨域嵌入
-                    if '*' not in csp:
-                        logger.info(f"URL {url} 的 CSP frame-ancestors 不包含通配符，禁止iframe嵌入")
-                        return False
-                
-                # 4. 检查响应大小 - 过大的内容不适合iframe
-                content_length = response_headers.get('content-length')
-                if content_length:
-                    try:
-                        size_mb = int(content_length) / (1024 * 1024)
-                        if size_mb > 50:  # 超过50MB认为过大
-                            logger.info(f"URL {url} 内容过大 ({size_mb:.1f}MB)，不适合iframe嵌入")
+                except (ValueError, TypeError):
+                    pass
+            
+            # 5. 检查是否是可访问的HTML页面
+            if 'text/html' in content_type or not content_type:
+                # 对于HTML页面，尝试获取部分内容检测JavaScript反iframe代码
+                html_content = None
+                try:
+                    # 如果之前是HEAD请求，需要重新发送GET请求获取内容
+                    if response.request.method == 'HEAD':
+                        get_response = requests.get(url, headers=headers, timeout=8, allow_redirects=True,
+                                                   verify=False, proxies=proxies, stream=True)
+                        # 只读取前5KB内容用于检测
+                        html_content = get_response.raw.read(5120, decode_content=True).decode('utf-8', errors='ignore')
+                        get_response.close()
+                    else:
+                        # 如果之前是GET请求，尝试读取已有内容
+                        try:
+                            html_content = response.content[:5120].decode('utf-8', errors='ignore')
+                        except Exception:
+                            pass
+                    
+                    # 检测常见的JavaScript反iframe模式
+                    if html_content:
+                        # 常见的反iframe JavaScript模式
+                        anti_iframe_patterns = [
+                            'top.location != self.location',
+                            'top.location !== self.location', 
+                            'top != self',
+                            'top !== self',
+                            'top.location.href != self.location.href',
+                            'top.location.href !== self.location.href',
+                            'window.top !== window.self',
+                            'window.top != window.self',
+                            'parent.frames.length > 0',
+                            'parent.frames.length',
+                            'frameElement',
+                            'if (window.top != window.self)',
+                            'if (window.top !== window.self)',
+                            'if(top!=self)',
+                            'if(top!==self)',
+                        ]
+                        
+                        # 检查是否包含反iframe代码
+                        anti_iframe_detected = False
+                        for pattern in anti_iframe_patterns:
+                            if pattern.lower() in html_content.lower():
+                                logger.info(f"URL {url} 检测到JavaScript反iframe代码: {pattern}")
+                                anti_iframe_detected = True
+                                break
+                        
+                        if anti_iframe_detected:
                             return False
-                    except (ValueError, TypeError):
-                        pass
+                            
+                except Exception as e:
+                    # 内容检测失败不影响结果，使用保守策略
+                    logger.debug(f"URL {url} 内容检测失败: {e}")
+                    pass
                 
-                # 5. 检查是否是可访问的HTML页面
-                if 'text/html' in content_type or not content_type:
-                    logger.info(f"URL {url} 是可访问的HTML页面，允许iframe嵌入")
-                    return True
-                else:
-                    logger.info(f"URL {url} 不是HTML页面 (Content-Type: {content_type})，不适合iframe嵌入")
-                    return False
+                logger.info(f"URL {url} 是可访问的HTML页面，允许iframe嵌入")
+                return True
+            else:
+                logger.info(f"URL {url} 不是HTML页面 (Content-Type: {content_type})，不适合iframe嵌入")
+                return False
                 
         except requests.exceptions.Timeout:
             logger.warning(f"URL {url} 请求超时，无法访问")
             return False
-        except requests.exceptions.ConnectionError:
-            logger.warning(f"URL {url} 连接失败，无法访问")
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"URL {url} 连接失败，无法访问: {e}")
+            return False
+        except requests.exceptions.TooManyRedirects:
+            logger.warning(f"URL {url} 重定向次数过多，无法访问")
+            return False
+        except requests.exceptions.SSLError as e:
+            logger.warning(f"URL {url} SSL错误，无法访问: {e}")
             return False
         except requests.exceptions.RequestException as e:
             logger.warning(f"URL {url} 请求失败: {e}")
@@ -279,7 +426,7 @@ class ToolResultProcessor:
         """将包含 work_space 的本地绝对路径改写为前端可访问的 URL。
 
         规则：
-        - 仅当路径中包含 "work_space/" 时改写
+        - 仅当路径中包含 "work_space" 时改写（兼容 work_space/ 和 work_space_ 格式）
         - 如果文件名没有前缀文件夹，自动补上当前工作空间路径
         - 使用配置项 base_api_url，缺省为 "/api/nae-deep-research/v1"
         - 仅对文件名进行 URL 编码，目录保持原样
@@ -289,10 +436,12 @@ class ToolResultProcessor:
                 return path_value
 
             normalized = path_value.replace("\\", "/")
-            marker = "work_space/"
+            
+            # 查找 work_space 标记，支持 work_space/ 和 work_space_ 两种格式
+            marker = "work_space"
             idx = normalized.find(marker)
             
-            # 如果没有找到work_space/标记，检查是否是纯文件名
+            # 如果没有找到work_space标记，检查是否是纯文件名
             if idx == -1:
                 # 检查是否是纯文件名（不包含路径分隔符）
                 if "/" not in normalized and "\\" not in normalized:
