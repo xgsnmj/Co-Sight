@@ -634,20 +634,31 @@ class MessageService {
 
     /**
      * 发送回放请求
-     * - 从 localStorage 读取 planId 与 workspace
-     *   - planId: 从 cosight:planIdByTopic 中取当前最近一个未完成或最近记录的 planId；若无，则提示
-     *   - workspace: 从 cosight:lastManusStep 中的 initData.step_files 的任意项的 path 中解析工作空间名
+     * @param {string} workspacePath - 工作区路径，如 'work_space/work_space_20251010_161223_071211'
+     * @param {string} replayPlanId - 可选的planId
      */
-    sendReplay() {
+    sendReplay(workspacePath, replayPlanId) {
         try {
+            console.log('sendReplay 被调用，参数:', { workspacePath, replayPlanId });
+            
             // 解析 workspace
             let replayWorkspace = null;
+            
+            // 1) 优先使用传入的参数
+            if (workspacePath && typeof workspacePath === 'string' && workspacePath.trim().length > 0) {
+                replayWorkspace = workspacePath.trim();
+                console.log('使用传入的工作区路径:', replayWorkspace);
+            }
+            
+            // 2) 回退逻辑
             try {
-                // 1) 优先从 cosight:workspace 读取
-                // const wsRaw = localStorage.getItem('cosight:workspace');
-                const wsRaw ='work_space_20250926_202755_412701';
-                if (wsRaw && typeof wsRaw === 'string' && wsRaw.trim().length > 0) {
-                    replayWorkspace = wsRaw.trim();
+                if (!replayWorkspace) {
+                    // 尝试从 localStorage 读取
+                    const wsRaw = localStorage.getItem('cosight:workspace');
+                    if (wsRaw && typeof wsRaw === 'string' && wsRaw.trim().length > 0) {
+                        replayWorkspace = wsRaw.trim();
+                        console.log('从 localStorage 获取工作区路径:', replayWorkspace);
+                    }
                 }
                 // 2) 回退到从 lastManusStep 推断
                 if (!replayWorkspace) {
@@ -677,33 +688,41 @@ class MessageService {
                 console.warn('解析workspace失败:', e);
             }
 
-            // 解析 planId（从 cosight:planIdByTopic 选择最新一个记录）
-            let replayPlanId = null;
-            try {
-                // const planRaw = localStorage.getItem('cosight:replayid');
-                const planRaw = '123';
-                if (planRaw) {
-                    replayPlanId = planRaw
-                    // const map = JSON.parse(planRaw);
-                    // const entries = Object.entries(map);
-                    // if (entries.length > 0) {
-                    //     // 选择 savedAt 最大或任意最后一个；这里按 Object 顺序取最后一个
-                    //     const last = entries[entries.length - 1][1];
-                    //     if (last && last.planId) replayPlanId = last.planId;
-                    // }
+            // 解析 planId
+            // 1) 优先使用传入的参数
+            if (!replayPlanId || typeof replayPlanId !== 'string' || replayPlanId.trim().length === 0) {
+                // 2) 尝试从 localStorage 获取
+                try {
+                    const planRaw = localStorage.getItem('cosight:planIdByTopic');
+                    if (planRaw) {
+                        const map = JSON.parse(planRaw);
+                        const entries = Object.entries(map);
+                        if (entries.length > 0) {
+                            // 取最后一个
+                            replayPlanId = entries[entries.length - 1][1];
+                            console.log('从 localStorage 获取 planId:', replayPlanId);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('解析planId失败:', e);
                 }
-            } catch (e) {
-                console.warn('解析planId失败:', e);
+            } else {
+                console.log('使用传入的 planId:', replayPlanId);
             }
 
+            // planId 是可选的，不强制要求
             if (!replayPlanId) {
-                alert('未找到可用的 planId，无法回放');
-                return;
+                console.log('未找到 planId，将生成新的');
+                replayPlanId = WebSocketService.generateUUID();
             }
+            
             if (!replayWorkspace) {
                 alert('未找到可用的 workspace，无法回放');
+                console.error('replayWorkspace 为空');
                 return;
             }
+            
+            console.log('最终使用的回放参数:', { replayWorkspace, replayPlanId });
 
             // 生成新的 topic 用于订阅这次回放
             const topic = WebSocketService.generateUUID();

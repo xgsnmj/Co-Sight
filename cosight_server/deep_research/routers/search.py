@@ -796,7 +796,13 @@ async def search(request: Request, params: Any = Body(None)):
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
                 curr_workspace = os.path.join(work_space_path, f'work_space_{timestamp}')
         elif explicit_workspace and isinstance(explicit_workspace, str) and len(explicit_workspace) > 0:
-            curr_workspace = explicit_workspace
+            # 处理显式指定的工作区路径
+            # 如果是相对路径(如 work_space/work_space_xxx)，需要转换为绝对路径
+            if not os.path.isabs(explicit_workspace):
+                curr_workspace = os.path.join(os.getcwd(), explicit_workspace)
+            else:
+                curr_workspace = explicit_workspace
+            logger.info(f"使用显式工作区路径: {curr_workspace}")
         else:
             try:
                 curr_workspace = os.environ.get('WORKSPACE_PATH')
@@ -808,29 +814,41 @@ async def search(request: Request, params: Any = Body(None)):
         replay_file_path = None
         if curr_workspace:
             try:
-                os.makedirs(curr_workspace, exist_ok=True)
+                # 回放模式下不需要创建目录，只需要读取已存在的文件
+                if not replay_mode:
+                    os.makedirs(curr_workspace, exist_ok=True)
                 replay_file_path = os.path.join(curr_workspace, 'replay.json')
-            except Exception:
+            except Exception as e:
+                logger.error(f"处理工作区路径失败: {e}")
                 replay_file_path = None
 
         if replay_mode:
             # 回放模式：逐行读取历史记录
             try:
-                print(f"Replay file path: {replay_file_path}")
-                replay_file_path='work_space/work_space_20250926_194936_689374/replay.json'
+                # 确保路径是绝对路径
+                if replay_file_path and not os.path.isabs(replay_file_path):
+                    replay_file_path = os.path.join(os.getcwd(), replay_file_path)
+                
+                logger.info(f"========== 回放模式 ==========")
+                logger.info(f"接收到的工作区路径: {explicit_workspace}")
+                logger.info(f"解析后的工作区路径: {curr_workspace}")
+                logger.info(f"回放文件完整路径: {replay_file_path}")
+                logger.info(f"当前工作目录: {os.getcwd()}")
+                logger.info(f"文件是否存在: {os.path.exists(replay_file_path) if replay_file_path else False}")
+                
                 if replay_file_path and os.path.exists(replay_file_path):
                     with open(replay_file_path, 'r', encoding='utf-8') as rf:
                         for line in rf:
                             line = line.rstrip('\n')
                             if not line:
-                                await asyncio.sleep(1)
+                                await asyncio.sleep(0.3)
                                 continue
                             try:
                                 yield line.encode('utf-8') + b'\n'
                             except Exception:
                                 # 如果编码失败，忽略该行
                                 pass
-                            await asyncio.sleep(1)
+                            await asyncio.sleep(0.3)
                     return
                 else:
                     # 没有历史回放文件，输出一条提示信息
@@ -1044,3 +1062,59 @@ async def show_search_results(request: Request, query: str = "", tool: str = "",
     """
     
     return HTMLResponse(content=html_content)
+
+
+@searchRouter.get("/replay/workspaces")
+async def get_replay_workspaces():
+    """获取所有包含replay.json的工作区列表"""
+    workspaces = []
+    
+    # 使用环境变量中的work_space_path
+    work_space_base = work_space_path
+    
+    if os.path.exists(work_space_base):
+        for folder_name in sorted(os.listdir(work_space_base), reverse=True):
+            folder_path = os.path.join(work_space_base, folder_name)
+            replay_file_path = os.path.join(folder_path, "replay.json")
+            
+            if os.path.isdir(folder_path) and os.path.exists(replay_file_path):
+                title = "未命名任务"
+                message_count = 0
+                
+                try:
+                    with open(replay_file_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                        message_count = len(lines)
+                        
+                        if lines:
+                            first_line_data = json.loads(lines[0])
+                            content = first_line_data.get('content', {})
+                            if isinstance(content, dict):
+                                title = content.get('title', '未命名任务')
+                            elif isinstance(content, str):
+                                try:
+                                    content_obj = json.loads(content)
+                                    title = content_obj.get('title', '未命名任务')
+                                except:
+                                    pass
+                except Exception as e:
+                    logger.warning(f"读取replay文件失败: {replay_file_path}, 错误: {e}")
+                    continue
+                
+                # 获取文件修改时间
+                mtime = os.path.getmtime(replay_file_path)
+                
+                workspaces.append({
+                    "workspace_name": folder_name,
+                    "workspace_path": f"work_space/{folder_name}",
+                    "title": title,
+                    "created_time": datetime.fromtimestamp(mtime).isoformat(),
+                    "message_count": message_count,
+                    "replay_file": f"work_space/{folder_name}/replay.json"
+                })
+    
+    return {
+        "code": 0,
+        "message": "success",
+        "data": workspaces
+    }

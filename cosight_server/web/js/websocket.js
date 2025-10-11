@@ -338,6 +338,36 @@ class WebsocketService {
             tryCount: this._tryCount
         };
     }
+
+    /**
+     * 发送回放请求
+     * @param {string} workspacePath - 工作区路径
+     * @returns {string} topic - 消息主题
+     */
+    sendReplayMessage(workspacePath) {
+        if (!this.isOpen) {
+            console.error("WebSocket is not open");
+            return null;
+        }
+
+        const topic = this.generateUUID();
+        const data = {
+            action: 'message',
+            topic: topic,
+            data: JSON.stringify({
+                query: '',  // 回放不需要query
+                extra: {
+                    replay: true,
+                    replayWorkspace: workspacePath
+                }
+            }),
+            lang: this._lang
+        };
+
+        console.log('发送回放请求:', data);
+        this._webSocket.send(JSON.stringify(data));
+        return topic;
+    }
 }
 
 // 创建全局实例
