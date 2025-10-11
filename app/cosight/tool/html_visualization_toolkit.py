@@ -43,7 +43,7 @@ import concurrent.futures
 import threading 
 import io  
 import gzip
-import htmlmin
+import minify_html
 import re
 
 from app.common.logger_util import logger
@@ -266,21 +266,26 @@ Please return the summary content directly without any prefixes or explanations.
             return self.summarize_content(content, MAX_CONTENT_LENGTH)
 
     def compress_html(self, html_content: str) -> str:
-        """压缩HTML内容以减少文件大小"""
+        """压缩HTML内容以减少文件大小
+        
+        使用 minify-html (兼容 Python 3.13+)
+        minify-html 是一个基于 Rust 的高性能 HTML 压缩库
+        """
         try:
-            # 移除多余的空白字符和换行
-            compressed = htmlmin.minify(
+            # 使用 minify-html 进行压缩
+            # minify-html 的 API 更简单，直接调用 minify() 函数
+            compressed = minify_html.minify(
                 html_content,
-                remove_comments=True,
-                remove_empty_space=True,
-                remove_all_empty_space=False,
-                reduce_empty_attributes=True,
-                reduce_boolean_attributes=True,
-                remove_optional_attribute_quotes=True,
-                convert_charrefs=True
+                minify_js=True,              # 压缩内联 JavaScript
+                minify_css=True,             # 压缩内联 CSS
+                remove_processing_instructions=True,  # 移除处理指令
+                keep_closing_tags=True,      # 保持闭合标签以兼容性
+                keep_comments=False,         # 移除注释
+                keep_spaces_between_attributes=False,  # 移除属性间空格
             )
             
-            # 额外的压缩：移除多余的空格
+            # minify-html 已经做了很好的压缩，通常不需要额外处理
+            # 但保留这些正则以防需要进一步优化
             compressed = re.sub(r'\s+', ' ', compressed)
             compressed = re.sub(r'>\s+<', '><', compressed)
             
