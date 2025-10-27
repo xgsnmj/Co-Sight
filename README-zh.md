@@ -1,6 +1,8 @@
 
 ## 🚀还在为邀请码发愁？一键部署 Co-Sight，快速搭建专属的类Manus系统！
 
+[![arXiv](https://img.shields.io/badge/arXiv-2510.21557-b31b1b)](https://arxiv.org/abs/2510.21557)
+
 自Manus发布之后，一些闭源平台虽具备优秀的用户体验和商业支持，却常面临高成本、访问受限、私有化部署困难等问题；而开源框架虽拥有更高的灵活性与透明度，却在功能完整性、样式丰富性和稳定性方面略显不足。
 
 **Co-Sight** 致力于在成本、质量、稳定性与易用性之间取得最佳平衡。它支持低成本大模型生成媲美 Claude模型 的高质量、美观报告，并可灵活部署于私有环境，助力企业与个人快速构建属于自己的类Manus系统。
@@ -109,3 +111,19 @@ docker restart ac39023b3b3fdc3245ec1cc0293afb6b0a5efd4675ee79535ed6663c3e2a2558
   
 
 一起让 Co Sight Agent 更加强大。
+
+## 📄 论文
+
+如果您在研究中使用 Co-Sight，请引用我们的论文：
+
+```bibtex
+@article{zhang2025cosight,
+  title={Co-Sight: Enhancing LLM-Based Agents via Conflict-Aware Meta-Verification and Trustworthy Reasoning with Structured Facts},
+  author={Zhang, Hongwei and Lu, Ji and Jiang, Shiqing and Zhu, Chenxiang and Xie, Li and Zhong, Chen and Chen, Haoran and Zhu, Yurui and Du, Yongsheng and Gao, Yanqin and Huang, Lingjun and Wang, Baoli and Tan, Fang and Zou, Peng},
+  journal={arXiv preprint arXiv:2510.21557},
+  year={2025},
+  url={https://arxiv.org/abs/2510.21557}
+}
+```
+
+论文地址：https://arxiv.org/abs/2510.21557

@@ -2,6 +2,7 @@
 ## 🚀 Still worried about the invitation code? One-click deployment of Co-Sight to quickly build your own Manus-like system!
 
 [![简体中文](https://img.shields.io/badge/简体中文-点击查看-orange)](README-zh.md)
+[![arXiv](https://img.shields.io/badge/arXiv-2510.21557-b31b1b)](https://arxiv.org/abs/2510.21557)
 
 Since the release of Manus, some closed-source platforms have faced problems such as high cost, limited access, and difficulty in privatization deployment, although they have excellent user experience and commercial support. Although open source frameworks have higher flexibility and transparency, they are slightly lacking in terms of functional integrity, style richness, and stability.
 
@@ -130,3 +131,19 @@ PRs and Issues are very welcome! If you have any ideas or suggestions:
   
 
 Together, we make the Co Sight Agent even more powerful.
+
+## 📄 Paper
+
+If you use Co-Sight in your research, please cite our paper:
+
+```bibtex
+@article{zhang2025cosight,
+  title={Co-Sight: Enhancing LLM-Based Agents via Conflict-Aware Meta-Verification and Trustworthy Reasoning with Structured Facts},
+  author={Zhang, Hongwei and Lu, Ji and Jiang, Shiqing and Zhu, Chenxiang and Xie, Li and Zhong, Chen and Chen, Haoran and Zhu, Yurui and Du, Yongsheng and Gao, Yanqin and Huang, Lingjun and Wang, Baoli and Tan, Fang and Zou, Peng},
+  journal={arXiv preprint arXiv:2510.21557},
+  year={2025},
+  url={https://arxiv.org/abs/2510.21557}
+}
+```
+
+Paper: https://arxiv.org/abs/2510.21557
