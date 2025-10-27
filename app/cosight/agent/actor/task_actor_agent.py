@@ -34,7 +34,7 @@ from app.cosight.tool.image_analysis_toolkit import VisionTool
 from app.cosight.tool.document_processing_toolkit import DocumentProcessingToolkit
 from app.cosight.tool.search_toolkit import SearchToolkit
 from app.cosight.tool.search_util import search_baidu
-from app.cosight.tool.scrape_website_toolkit import fetch_website_content
+from app.cosight.tool.scrape_website_toolkit import fetch_website_content, fetch_website_content_with_images, fetch_website_images_only
 from app.cosight.tool.deep_search.searchers.tavily_search import TavilySearch
 from app.cosight.tool.audio_toolkit import AudioTool
 from app.cosight.tool.video_analysis_toolkit import VideoTool
@@ -101,7 +101,7 @@ class TaskActorAgent(BaseAgent):
                          "search_google": search_toolkit.search_google,
                          "search_wiki": search_toolkit.search_wiki,
                          "tavily_search": search_toolkit.tavily_search,
-                         "image_search": tavily_search.search,
+                        #  "image_search": tavily_search.search,
                          "audio_recognition": audio_toolkit.speech_to_text,
                          # "search_duckgo": search_toolkit.search_duckduckgo,
                          "execute_code": code_toolkit.execute_code,
@@ -113,6 +113,8 @@ class TaskActorAgent(BaseAgent):
                          "ask_question_about_image": image_toolkit.ask_question_about_image,
                          "ask_question_about_video": video_toolkit.ask_question_about_video,
                          "fetch_website_content": fetch_website_content,
+                         "fetch_website_content_with_images": fetch_website_content_with_images,
+                         "fetch_website_images_only": fetch_website_images_only,
                          "extract_document_content": doc_toolkit.extract_document_content,
                          "create_html_report": lambda title=None, include_charts=True, chart_types=['all'], output_filename=None: html_toolkit.create_html_report(
                              title=title,

@@ -260,7 +260,6 @@ class BaseAgent:
             "file_find_in_content": "文件内容查找",
             
             # 代码执行类工具
-            # "code_executor": "代码执行器",
             "execute_code": "代码执行器",
             "python_executor": "Python执行器",
             "shell_executor": "Shell执行器",

@@ -62,6 +62,8 @@ def create_actor_template(template_name, work_space_path):
                    extract_document_content_skill(),
                    create_html_report_skill(),
                    fetch_website_content_skill(),
+                   fetch_website_content_with_images_skill(),
+                   fetch_website_images_only_skill(),
                    # search_duckgo_skill(),
                    search_wiki_skill(),
                    audio_recognition_skill(),

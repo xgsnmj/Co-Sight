@@ -431,6 +431,8 @@ function getToolDisplayName(toolName) {
         'report_generator': 'report_generator',
         'create_plan': 'create_plan',
         'fetch_website_content': 'fetch_website_content',
+        'fetch_website_content_with_images': 'fetch_website_content_with_images',
+        'fetch_website_images_only': 'fetch_website_images_only',
         'tavily_search': 'tavily_search',
         'search_wiki': 'wiki_search'
     };
@@ -452,6 +454,8 @@ function getToolDisplayName(toolName) {
         'report_generator': '报告生成',
         'create_plan': '创建计划',
         'fetch_website_content': '获取网页内容',
+        'fetch_website_content_with_images': '网页内容爬取（含图片）',
+        'fetch_website_images_only': '网页图片提取',
         'tavily_search': 'Tavily搜索',
         'search_wiki': '维基百科搜索'
     };
