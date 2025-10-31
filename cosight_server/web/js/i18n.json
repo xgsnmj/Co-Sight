@@ -1,6 +1,6 @@
 ﻿{
   "zh": {
-    "app_title": "Co-Sight 超级智能体",
+    "app_title": "华小创 超级智能体",
     "welcome_title": "你好，",
     "welcome_subtitle": "今天有什么可以帮到你？",
     "input_placeholder": "请输入你的任务...",
@@ -11,7 +11,7 @@
     "overall_progress": "总体进度",
     "select_node_title": "选择节点查看详情",
     "select_node_description": "点击上方的节点来查看该步骤的详细信息。",
-    "cosight_computer": "Co-Sight 的电脑",
+    "cosight_computer": "华小创 的电脑",
     "viewing_file_content": "正在查看文件内容...",
     "scroll_to_zoom": "滚轮缩放",
     "drag_to_move": "按住鼠标拖动",
